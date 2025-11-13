@@ -13,40 +13,60 @@ from MaterialClass import Material
 ## Section 1 - Define System Parameters and Initial Ray ##
 
 # Define a rectangular prism bounding box:
-boundingBox = Material([], 0, 7, 0, 5, 0, 5, [], [], [], [], [])
+boundingBox = Material([], -2, 2, 0, 5, 0, 6, [], [], [], [], [], [], [], [], [])
 
 # Define system materials:
-no1 = tf.constant(1.0)
-no2 = tf.constant(1.2)
-ne2 = tf.constant(1.9)
-c0 = tf.constant(.7854)
-c1 = tf.constant(1.0)
-c2 = tf.constant(0.0)
-no3 = tf.constant(1.0)
+a0_1 = tf.constant(1.0) # no1
+a1_1 = tf.constant(0.0)
+a2_1 = tf.constant(0.0)
+
+a0_2 = tf.constant(3.0) # no2
+a1_2 = tf.constant(0.0)
+a2_2 = tf.constant(-0.4)
+
+
+a0_3 = tf.constant(1.0)
+a1_3 = tf.constant(0.0)
+a2_3 = tf.constant(0.0)
 
 with tf.GradientTape(persistent=True) as tape:
 
-    tape.watch(c0)
-    tape.watch(c1)
+    tape.watch(a0_1)
 
-    mat1 = Material(True, 0, 7, 0, 5, 0, 2, no1, [], [], [], [])
-    mat2 = Material(False, 0, 7, 0, 5, 2, 3, no2, ne2, c0, c1, c2)
-    mat3 = Material(True, 0, 7, 0, 5, 3, 5, no3, [], [], [], [])
+    mat1 = Material(True, -2, 2, 0, 5, 0, 2, a0_1, a1_1, a2_1, [], [], [], [], [], [])
+    mat2 = Material(True, -2, 2, 0, 5, 2, 6, a0_2, a1_2, a2_2, [], [], [], [], [], [])
+    mat3 = Material(True, -2, 2, 0, 5, 3, 6, a0_3, a1_3, a2_3, [], [], [], [], [], [])
 
     # Create list of materials:
-    matList = [mat1, mat2, mat3]
+    matList = [mat1, mat2]
 
     # Create a list of completed rays and in progress rays:
     cpRays = []
     ipRays = []
 
     # Define the incident ray (or multiple rays):
-    incident_position = [tf.constant(0.5), tf.constant(2.5), tf.constant(0.0)]
-    pi = [tf.constant(.7071), tf.constant(0.0), tf.constant(.7071)]
-    Ei = [tf.constant(-0.57735, dtype=tf.complex64), tf.constant(0.57735, dtype=tf.complex64), tf.constant(0.57735, dtype=tf.complex64)]
+    incident_position = [tf.constant(-0.5), tf.constant(2.5), tf.constant(0.0)]
+    pi = [tf.constant(0.00000001), tf.constant(0.0), tf.constant(1.0)]
+    Ei = [tf.constant(0.0, dtype=tf.complex64), tf.constant(1.0, dtype=tf.complex64), tf.constant(0.0, dtype=tf.complex64)]
     incident_material = hp.getMaterialAtCoordinate(matList, incident_position)
     incident_ray = Ray(incident_position[0], incident_position[1], incident_position[2], pi[0], pi[1], pi[2], 1.0, Ei, incident_material, True)
     ipRays.append(incident_ray)
+
+    incident_position2 = [tf.constant(-0.25), tf.constant(2.5), tf.constant(0.0)]
+    incident_ray2 = Ray(incident_position2[0], incident_position2[1], incident_position2[2], pi[0], pi[1], pi[2], 1.0, Ei, incident_material, True)
+    ipRays.append(incident_ray2)
+
+    incident_position3 = [tf.constant(0.0), tf.constant(2.5), tf.constant(0.0)]
+    incident_ray3 = Ray(incident_position3[0], incident_position3[1], incident_position3[2], pi[0], pi[1], pi[2], 1.0, Ei, incident_material, True)
+    ipRays.append(incident_ray3)
+
+    incident_position3 = [tf.constant(0.25), tf.constant(2.5), tf.constant(0.0)]
+    incident_ray4 = Ray(incident_position3[0], incident_position3[1], incident_position3[2], pi[0], pi[1], pi[2], 1.0, Ei, incident_material, True)
+    ipRays.append(incident_ray4)
+
+    incident_position5 = [tf.constant(0.5), tf.constant(2.5), tf.constant(0.0)]
+    incident_ray5 = Ray(incident_position5[0], incident_position5[1], incident_position5[2], pi[0], pi[1], pi[2], 1.0, Ei, incident_material, True)
+    ipRays.append(incident_ray5)
 
     # Initialize a boolean variable to check if the ray is in the bounding box:
     inBounds = True
@@ -89,6 +109,10 @@ for i in range(len(cpRays)):
         plt.plot(cpRays[i].rz, cpRays[i].rx, color='red')
     else:
         plt.plot(cpRays[i].rz, cpRays[i].rx, color='blue')
+
+# Plot vertical lines to indicate boundaries between different media:
+plt.axvline(x=2, color='black', linestyle='--')
+# plt.axvline(x=5, color='red', linestyle='--')
 
 plt.title("2D Ray Propagation")
 plt.xlabel("Z-Axis")

@@ -28,7 +28,7 @@ class Ray:
     # Function for single time step of ray propagation:
     def propagation_step(self, time_step):
         if self.ordinary:
-            rx, ry, rz, pox, poy, poz, E = wp.OrdinaryWavePropagation(self.rx[-1], self.ry[-1], self.rz[-1], self.px[-1], self.py[-1], self.pz[-1], time_step, self.Efield[-1])
+            rx, ry, rz, pox, poy, poz, E = wp.OrdinaryWavePropagation(self.rx[-1], self.ry[-1], self.rz[-1], self.px[-1], self.py[-1], self.pz[-1], self.Mat.a0, self.Mat.a1, self.Mat.a2, time_step, self.Efield[-1])
             self.rx.append(rx)
             self.ry.append(ry)
             self.rz.append(rz)
@@ -37,7 +37,7 @@ class Ray:
             self.pz.append(poz)
             self.Efield.append(E)
         else:
-            rx, ry, rz, pex, pey, pez, E = wp.ExtraordinaryWavePropagation(self.rx[-1], self.ry[-1], self.rz[-1], self.px[-1], self.py[-1], self.pz[-1], self.Mat.no, self.Mat.ne, self.Mat.c0, self.Mat.c1, self.Mat.c2, time_step, self.Efield[-1])
+            rx, ry, rz, pex, pey, pez, E = wp.ExtraordinaryWavePropagation(self.rx[-1], self.ry[-1], self.rz[-1], self.px[-1], self.py[-1], self.pz[-1], self.Mat.a0, self.Mat.a1, self.Mat.a2, self.Mat.b0, self.Mat.b1, self.Mat.b2, self.Mat.c0, self.Mat.c1, self.Mat.c2, time_step, self.Efield[-1])
             self.rx.append(rx)
             self.ry.append(ry)
             self.rz.append(rz)
@@ -52,14 +52,20 @@ class Ray:
         n = hp.getSurfaceNormal(currentMat, self.Mat)
         # Isotropic-Isotropic Interface:
         if self.Mat.iso and currentMat.iso:
-            p_r, p_t, E_r, E_t, S_r, S_t = ia.Isotropic_Isotropic(n, self.Mat.no, currentMat.no, [self.px[-2], self.py[-2], self.pz[-2]], self.Efield[-2])
+            # Find the indices of refraction at the boundary:
+            e_perp, _, _, _ = hp.getOrdinaryIndex(self.rx[-2], self.ry[-2], self.rz[-2], self.Mat.a0, self.Mat.a1, self.Mat.a2)
+            no1 = tf.math.sqrt(e_perp)
+            e_perp, _, _, _ = hp.getOrdinaryIndex(self.rx[-1], self.ry[-1], self.rz[-1], currentMat.a0, currentMat.a1, currentMat.a2)
+            no2 = tf.math.sqrt(e_perp)
+
+            p_r, p_t, E_r, E_t, S_r, S_t = ia.Isotropic_Isotropic(n, no1, no2, [self.px[-2], self.py[-2], self.pz[-2]], self.Efield[-2])
             # Initialize reflected ray:
             # Check for negligible magnitude and/or evanescent wave:
             check = hp.validRay(S_r, p_r)
             if check:
                 p_r = tf.math.real(p_r)
                 ray1 = Ray(self.rx[-2], self.ry[-2], self.rz[-2], p_r[0], p_r[1], p_r[2], S_r, E_r, self.Mat, True)
-                rays.append(ray1)
+                # rays.append(ray1)
             # Initialize transmitted ray:
             check = hp.validRay(S_t, p_t)
             if check:
@@ -69,8 +75,16 @@ class Ray:
             return rays
         # Isotropic-Anisotropic Interface:
         if self.Mat.iso and not(currentMat.iso):
+            # Find the indices of refraction and optical axis at the boundary:
+            e_perp, _, _, _ = hp.getOrdinaryIndex(self.rx[-2], self.ry[-2], self.rz[-2], self.Mat.a0, self.Mat.a1, self.Mat.a2)
+            no1 = tf.math.sqrt(e_perp)
+            e_perp, _, _, _ = hp.getOrdinaryIndex(self.rx[-1], self.ry[-1], self.rz[-1], currentMat.a0, currentMat.a1, currentMat.a2)
+            no2 = tf.math.sqrt(e_perp)
+            e_para, _, _, _ = hp.getExtraordinaryIndex(self.rx[-1], self.ry[-1], self.rz[-1], currentMat.b0, currentMat.b1, currentMat.b2)
+            ne2 = tf.math.sqrt(e_para)
             o2, _, _, _, _, _, _, _, _, _ = hp.getDirector(self.rx[-1], self.ry[-1], self.rz[-1], currentMat.c0, currentMat.c1, currentMat.c2)
-            p_r, p_to, p_te, E_r, E_to, E_te, S_r, S_to, S_te = ia.Isotropic_Anisotropic(n, o2, self.Mat.no, currentMat.no, currentMat.ne, [self.px[-2], self.py[-2], self.pz[-2]], self.Efield[-2])
+
+            p_r, p_to, p_te, E_r, E_to, E_te, S_r, S_to, S_te = ia.Isotropic_Anisotropic(n, o2, no1, no2, ne2, [self.px[-2], self.py[-2], self.pz[-2]], self.Efield[-2])
             # Initialize the reflected ray:
             check = hp.validRay(S_r, p_r)
             if check:
@@ -92,9 +106,16 @@ class Ray:
             return rays
         # Anisotropic-Isotropic Interface:
         if not(self.Mat.iso) and currentMat.iso:
+            # Find the indices of refraction and optical axis at the boundary:
+            e_perp, _, _, _ = hp.getOrdinaryIndex(self.rx[-2], self.ry[-2], self.rz[-2], self.Mat.a0, self.Mat.a1, self.Mat.a2)
+            no1 = tf.math.sqrt(e_perp)
+            e_para, _, _, _ = hp.getExtraordinaryIndex(self.rx[-2], self.ry[-2], self.rz[-2], self.Mat.b0, self.Mat.b1, self.Mat.b2)
+            ne1 = tf.math.sqrt(e_para)
+            e_perp, _, _, _ = hp.getOrdinaryIndex(self.rx[-1], self.ry[-1], self.rz[-1], currentMat.a0, currentMat.a1, currentMat.a2)
+            no2 = tf.math.sqrt(e_perp)
             o1, _, _, _, _, _, _, _, _, _ = hp.getDirector(self.rx[-2], self.ry[-2], self.rz[-2], self.Mat.c0, self.Mat.c1, self.Mat.c2)
-            # Ei = hp.getEfield(self.Mat.no, self.Mat.ne, self.px[-2], self.py[-2], self.pz[-2], o1, self.ordinary)
-            p_ro, p_re, p_t, E_ro, E_re, E_t, S_ro, S_re, S_t = ia.Anisotropic_Isotropic(n, o1, self.Mat.no, self.Mat.ne, currentMat.no, [self.px[-2], self.py[-2], self.pz[-2]], self.Efield[-2])
+            
+            p_ro, p_re, p_t, E_ro, E_re, E_t, S_ro, S_re, S_t = ia.Anisotropic_Isotropic(n, o1, no1, ne1, no2, [self.px[-2], self.py[-2], self.pz[-2]], self.Efield[-2])
             # Initialize the reflected ordinary ray:
             check = hp.validRay(S_ro, p_ro)
             if check:
@@ -116,10 +137,18 @@ class Ray:
             return rays
         # Anisotropic-Anisotropic Interface:
         if not(self.Mat.iso) and not(currentMat.iso):
+            # Find the indices of refraction and optical axis at the boundary:
+            e_perp, _, _, _ = hp.getOrdinaryIndex(self.rx[-2], self.ry[-2], self.rz[-2], self.Mat.a0, self.Mat.a1, self.Mat.a2)
+            no1 = tf.math.sqrt(e_perp)
+            e_para, _, _, _ = hp.getExtraordinaryIndex(self.rx[-2], self.ry[-2], self.rz[-2], self.Mat.b0, self.Mat.b1, self.Mat.b2)
+            ne1 = tf.math.sqrt(e_para)
+            e_perp, _, _, _ = hp.getOrdinaryIndex(self.rx[-1], self.ry[-1], self.rz[-1], currentMat.a0, currentMat.a1, currentMat.a2)
+            no2 = tf.math.sqrt(e_perp)
+            e_para, _, _, _ = hp.getExtraordinaryIndex(self.rx[-1], self.ry[-1], self.rz[-1], currentMat.b0, currentMat.b1, currentMat.b2)
             o1, _, _, _, _, _, _, _, _, _ = hp.getDirector(self.rx[-2], self.ry[-2], self.rz[-2], self.Mat.c0, self.Mat.c1, self.Mat.c2)
             o2, _, _, _, _, _, _, _, _, _ = hp.getDirector(self.rx[-1], self.ry[-1], self.rz[-1], currentMat.c0, currentMat.c1, currentMat.c2)
-            # Ei = hp.getEfield(self.Mat.no, self.Mat.ne, self.px[-2], self.py[-2], self.pz[-2], o1, self.ordinary)
-            p_ro, p_re, p_to, p_te, E_ro, E_re, E_to, E_te, S_ro, S_re, S_to, S_te = ia.Anisotropic_Anisotropic(n, o1, o2, self.Mat.no, self.Mat.ne, currentMat.no, currentMat.ne, [self.px[-2], self.py[-2], self.pz[-2]], self.Efield[-2])
+            
+            p_ro, p_re, p_to, p_te, E_ro, E_re, E_to, E_te, S_ro, S_re, S_to, S_te = ia.Anisotropic_Anisotropic(n, o1, o2, no1, ne1, no2, ne2, [self.px[-2], self.py[-2], self.pz[-2]], self.Efield[-2])
             # Initialize the reflected ordinary ray:
             check = hp.validRay(S_ro, p_ro)
             if check:

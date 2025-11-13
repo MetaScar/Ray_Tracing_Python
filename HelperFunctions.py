@@ -82,8 +82,7 @@ def getEfield(no, ne, px, py, pz, o, ordinary):
         E = tf.transpose(tf.linalg.inv(A1)@E_p)
         return E
 
-
-# This function is the analytical functions for the director_profile and its derivatives:
+# This function contains the analytical functions for the director_profile and its derivatives.
 # The derivatives must be analytically calculated by hand.
 def  getDirector(x,y,z, c0, c1, c2):
     theta_d = c0 + c1*z + c2*z**2
@@ -99,6 +98,26 @@ def  getDirector(x,y,z, c0, c1, c2):
     ddz_z = -1*(c1 + 2*c2*z)*tf.math.sin(theta_d)
 
     return director, ddx_x, ddx_y, ddx_z, ddy_x, ddy_y, ddy_z, ddz_x, ddz_y, ddz_z
+
+# These function contains the analytical functions for no and ne and their spatial derivatives.
+# The derivatives must be analytically calculated by hand.
+def getOrdinaryIndex(x,y,z, a0, a1, a2):
+    no = a0 + a1*x + a2*x**2
+    e_perp = no**2
+    dno_dx = a1 + 2*a2*x
+    deperp_dx = 2*no*dno_dx
+    deperp_dy = tf.constant(0.0)
+    deperp_dz = tf.constant(0.0)
+    return e_perp, deperp_dx, deperp_dy, deperp_dz
+
+def getExtraordinaryIndex(x,y,z, b0, b1, b2):
+    ne = b0 + b1*x + b2*x**2
+    e_para = ne**2
+    dne_dx = b1 * 2*b2*x
+    depara_dx = 2*ne*dne_dx
+    depara_dy = tf.constant(0.0)
+    depara_dz = tf.constant(0.0)
+    return e_para, depara_dx, depara_dy, depara_dz
 
 # This function takes in a list of materials and a specified 3D coordinate, then returns the material that corresponds to that coordinate.
 def getMaterialAtCoordinate(materials, coordinate):
