@@ -66,6 +66,7 @@ def findEPolVector(A, pe, o, no, ne):
     return E_pol
 
 # This function takes in the wave vector at an anisotropic boundary and calculates the associated incident Electric field vector.
+# THIS FUNCTION IS NO LONGER USED. The electric field is now tracked along with ray propagation.
 def getEfield(no, ne, px, py, pz, o, ordinary):
     p = [px, py, pz]
     A1 = findRotationMatrix(tf.transpose(tf.squeeze(o)))
@@ -102,12 +103,10 @@ def  getDirector(x,y,z, c0, c1, c2):
 # These function contains the analytical functions for no and ne and their spatial derivatives.
 # The derivatives must be analytically calculated by hand.
 def getOrdinaryIndex(x,y,z, a0, a1, a2):
-    no = a0 + a1*x + a2*x**2
-    e_perp = no**2
-    dno_dx = a1 + 2*a2*x
-    deperp_dx = 2*no*dno_dx
-    deperp_dy = tf.constant(0.0)
-    deperp_dz = tf.constant(0.0)
+    e_perp = a1 - a2*(x**2 + y**2 + z**2)/a0**2
+    deperp_dx = -2*x*a2/a0**2
+    deperp_dy = -2*y*a2/a0**2
+    deperp_dz = -2*z*a2/a0**2
     return e_perp, deperp_dx, deperp_dy, deperp_dz
 
 def getExtraordinaryIndex(x,y,z, b0, b1, b2):
@@ -120,32 +119,58 @@ def getExtraordinaryIndex(x,y,z, b0, b1, b2):
     return e_para, depara_dx, depara_dy, depara_dz
 
 # This function takes in a list of materials and a specified 3D coordinate, then returns the material that corresponds to that coordinate.
+# This code works for either rectangular slabs or concentric spheres (all materials must be the same type!)
 def getMaterialAtCoordinate(materials, coordinate):
     x = coordinate[0]
     y = coordinate[1]
     z = coordinate[2]
-    for element in materials:
-        if (x>=element.xmin) and (x<=element.xmax) and (y>=element.ymin) and (y<=element.ymax) and (z>=element.zmin) and (z<=element.zmax):
-            actual_material = element
-            break
-    return actual_material
+    if materials[0].type == "rect":
+        for element in materials:
+            if (x>=element.xmin) and (x<=element.xmax) and (y>=element.ymin) and (y<=element.ymax) and (z>=element.zmin) and (z<=element.zmax):
+                actual_material = element
+                break
+        return actual_material
+    if materials[0].type == "sphere":
+        r = tf.math.sqrt(x**2 + y**2 + z**2)
+        for element in materials:
+            if (r>=element.rmin) and (r<=element.rmax):
+                actual_material = element
+                break
+        return actual_material
+
 
 # This function takes in a position (x,y,z) and returns True if the point is within the bouding box, False if outside the bounding box.
+# This code works for either rectangular slabs or concentric spheres (all materials must be the same type!)    
 def checkBoundary(boundingBox, coordinate):
     x = coordinate[0]
     y = coordinate[1]
     z = coordinate[2]
-    if (x>=boundingBox.xmin) and (x<=boundingBox.xmax) and (y>=boundingBox.ymin) and (y<=boundingBox.ymax) and (z>=boundingBox.zmin) and (z<=boundingBox.zmax):
-        return True
-    else:
-        return False
+    if boundingBox.type == "rect":
+        if (x>=boundingBox.xmin) and (x<=boundingBox.xmax) and (y>=boundingBox.ymin) and (y<=boundingBox.ymax) and (z>=boundingBox.zmin) and (z<=boundingBox.zmax):
+            return True
+        else:
+            return False
+    if boundingBox.type == "sphere":
+        r = tf.math.sqrt(x**2 + y**2 + z**2)
+        if (r<=boundingBox.rmax):
+            return True
+        else:
+            return False
+    
 
-# This function takes in a current Material and a previous material and calculates the surface normal unit vector. Note: This currently only works for 2D rectangular slabs.
-def getSurfaceNormal(currentMat, prevMat):
-    if currentMat.zmax >= prevMat.zmax:
-        return [0.0, 0.0, 1.0]
-    else:
-        return [0.0, 0.0, -1.0]
+# This function takes in a current Material and a previous material and calculates the surface normal unit vector.
+# This code works for either rectangular slabs or concentric spheres (all materials must be the same type!)    
+def getSurfaceNormal(currentMat, prevMat, coordinate):
+    if currentMat.type == "rect":
+        if currentMat.zmax >= prevMat.zmax:
+            return [0.0, 0.0, 1.0]
+        else:
+            return [0.0, 0.0, -1.0]
+    if currentMat.type == "sphere":
+        if prevMat.rmax > currentMat.rmax:
+            return [coordinate[0].numpy(), coordinate[1].numpy(), coordinate[2].numpy()]/(-1.0*tf.norm(coordinate).numpy())
+        else:
+            return [coordinate[0].numpy(), coordinate[1].numpy(), coordinate[2].numpy()]/tf.norm(coordinate).numpy()
 
 # This function calculates the cross product of two, in general complex, 1x3 vectors.
 def cross(a, b):

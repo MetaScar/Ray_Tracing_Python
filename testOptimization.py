@@ -23,18 +23,16 @@ R = tf.constant(3.0)
 
 # Luneburg Lens material:
 a0_1 = R
-a1_1 = tf.constant(2.1)
-a2_1 = tf.constant(0.9)
+a1_1 = tf.Variable(2.1)
+a2_1 = tf.Variable(0.9)
 
 # Air surrounding the lens:
 a0_2 = tf.constant(1.0)
 a1_2 = tf.constant(1.0)
 a2_2 = tf.constant(0.0)
 
-with tf.GradientTape(persistent=True) as tape:
-
-    tape.watch(a0_2)
-    tape.watch(a2_2)
+# Objective function:
+def objective_func(boundingBox, a0_1, a1_1, a2_1, a0_2, a1_2, a2_2):
 
     mat1 = Material(True, "sphere", [0,0,0,0,3] ,a0_1, a1_1, a2_1, [], [], [], [], [], [])
     mat2 = Material(True, "sphere", [0,0,0,3,7], a0_2, a1_2, a2_2, [], [], [], [], [], [])
@@ -131,36 +129,52 @@ with tf.GradientTape(persistent=True) as tape:
 
     ## Section 3 - Calculation of Objective (or Cost) Function:
     f = of.focusObjective(cpRays, 3, 0)
-    print(f.numpy())
+    return f
 
-# test_grad1 = tape.gradient(f, a0_2)
-# test_grad2 = tape.gradient(f, a2_2)
-# print(test_grad1.numpy())
-# print(test_grad2.numpy())
+learning_rate = 0.01
 
-# print(gradient1.numpy())   
+# Training Loop:
+objectives = []
+input_1 = []
+input_2 = []
+for i in range(5):
+    with tf.GradientTape() as tape:
+        current_objective = objective_func(boundingBox, a0_1, a1_1, a2_1, a0_2, a1_2, a2_2)
+    gradients = tape.gradient(current_objective, [a1_1, a2_1])
+    # Keep track on inputs variables over time for analysis purposes:
+    input_1.append(a0_2.numpy())
+    input_2.append(a2_2.numpy())
+    a1_1.assign_add(learning_rate * gradients[0])
+    a2_1.assign_add(learning_rate * gradients[1])
 
+    objectives.append(current_objective)
+
+# Plot the objective function as a function of iteration number:
+plt.plot(objectives)
+plt.xlabel("Iteration")
+plt.ylabel("Value of Objective Function")
+plt.savefig("Test_Optimization.png")
+
+
+
+'''
 ## Section 3 - Plotting ##
-plt.figure(figsize=(7,7))
-
 for i in range(len(cpRays)):
     if not(cpRays[i].ordinary):
         plt.plot(cpRays[i].rz, cpRays[i].rx, color='red')
     else:
         plt.plot(cpRays[i].rz, cpRays[i].rx, color='blue')
 
-# Plot a circle of radius 3 to indicate where the Luneburg Lens is:
-theta = tf.linspace(0.0, 2.0*3.14159, 100)
-x = 3*tf.math.cos(theta)
-y = 3*tf.math.sin(theta)
-
-plt.plot(x, y, color='black')
+# Plot vertical lines to indicate boundaries between different media:
+plt.axvline(x=2, color='black', linestyle='--')
+# plt.axvline(x=5, color='red', linestyle='--')
 
 plt.title("2D Ray Propagation")
 plt.xlabel("Z-Axis")
 plt.ylabel("X-Axis")
-plt.xlim(-5.0, 5.0)
-plt.ylim(-5.0, 5.0)
+plt.xlim(boundingBox.zmin, boundingBox.zmax)
+plt.ylim(boundingBox.xmin, boundingBox.xmax)
 
 plt.savefig("Test_plot.png")
 
+'''

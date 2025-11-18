@@ -49,7 +49,7 @@ class Ray:
     # This function returns a list of Rays which wil be subsequently appended to the total list of rays in the main function.
     def initialize_new_rays(self, currentMat):
         rays = []
-        n = hp.getSurfaceNormal(currentMat, self.Mat)
+        n = hp.getSurfaceNormal(currentMat, self.Mat, [self.rx[-1], self.ry[-1], self.rz[-1]])
         # Isotropic-Isotropic Interface:
         if self.Mat.iso and currentMat.iso:
             # Find the indices of refraction at the boundary:
