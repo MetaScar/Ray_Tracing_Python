@@ -2,12 +2,9 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import HelperFunctions as hp
 
+# THIS IS AN ATTEMPT TO FIX POTENTIAL ERRORS WITH THE PREVIOUS VERSION OF THE WAVE PROPAGATION FUNCTION
 # This function takes ONE STEP in the first-order Runge-Kutta to calculate the next value of the ray path r(t) and wave normal p(t) for an ordinary wave.
 def OrdinaryWavePropagation(rx_init, ry_init, rz_init, pox_init, poy_init, poz_init, mat, distance_step, E): 
-
-    # Make distance step smaller around the focal point:
-    #if(rz_init > 0.315 and rz_init < 0.325):
-        #distance_step = 0.0001
 
     ko = 209.4395102 # For f = 10 GHz
 
@@ -62,10 +59,6 @@ def OrdinaryWavePropagation(rx_init, ry_init, rz_init, pox_init, poy_init, poz_i
 # Note that currently only explicit mathematical formulas for director profiles are supported.
 def ExtraordinaryWavePropagation(rx_init, ry_init, rz_init, pex_init, pey_init, pez_init, mat, distance_step, E):
 
-    # Make distance step smaller around the focal point:
-    #if(rz_init > 0.315 and rz_init < 0.325):
-        #distance_step = 0.0001
-
     ko = 209.4395102 # For f = 10 GHz
 
     # Calculates e_perp, e_paralell, and the associated spatial derivatives:
@@ -105,7 +98,7 @@ def ExtraordinaryWavePropagation(rx_init, ry_init, rz_init, pex_init, pey_init, 
 
     # Calculate phase progression and total phase:
     delta_phi = ko*(pex_init*k4*h + pey_init*k5*h + pez_init*k6*h)
-    Ephase = -1.0*prev_phase + delta_phi
+    Ephase = prev_phase + delta_phi
 
     # Calculate director (optical axis) as an intermediate step for calculating the electric polarization vector:
     director, _, _, _, _, _, _, _, _, _ = hp.getDirector(rx_init, ry_init, rz_init, mat.c0, mat.c1, mat.c2)
