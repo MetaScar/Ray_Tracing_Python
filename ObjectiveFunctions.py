@@ -6,7 +6,7 @@ import HelperFunctions as hp
 # This objective function returns the total power density passing through a specified 2D rectangular area.
 # This is a way of measuring how much of a focus there is at that point.
 # The dot product only considered the power density of rays with a specified linear polarization (in this case y-pol)
-def focusObjective(cpRays, z, x, C1, C2):
+def focusObjective(cpRays, z, x, C0, C2):
     total_S = 0 # variable to keep track of total power density, scaled by the distance to the focal point and correct polarization.
 
     for i in range(len(cpRays)):
@@ -20,7 +20,7 @@ def focusObjective(cpRays, z, x, C1, C2):
                 #polarization_factor = tf.tensordot(E_pol, [tf.constant(1.0, dtype=tf.complex64), tf.constant(0.0, dtype=tf.complex64), tf.constant(0.0, dtype=tf.complex64)], axes=1)
 
             # penalty if permittivity falls to less than one:
-            val = (C1 - .0025*C2 - 1)
+            val = (C0 - .0025*C2 - 1)
             penalty = 1/(1+tf.math.exp(-10.0*val - 5.0))
             penalty = tf.cast(penalty, dtype=tf.complex64)
             total_S = total_S + distance_factor*penalty
@@ -38,6 +38,8 @@ def getClosestPosition(ray, zf, xf):
             E_pol = ray.Efield[i]
 
     return min_d2, E_pol
+
+# Given a set of rays, this function approximately determines the focal point
 
 # Given a ray, this helper function determines whether or not the ray passes through a specified 2D rectangular area.
 def passThroughFocal(ray, z, x, res):

@@ -108,15 +108,15 @@ def  getDirector(x,y,z, c0, c1, c2):
 # These function contains the analytical functions for no and ne and their spatial derivatives.
 # The derivatives must be analytically calculated by hand.
 def getOrdinaryIndex(x,y,z, a0, a1, a2):
-    e_perp = a0 + a2*x**2
-    deperp_dx = 2*a2*x
+    e_perp = a0*(1 - a2**2*x**2)
+    deperp_dx = -2.0*a0*x*a2**2
     deperp_dy = tf.constant(0.0)
     deperp_dz = tf.constant(0.0)
     return e_perp, deperp_dx, deperp_dy, deperp_dz
 
 def getExtraordinaryIndex(x,y,z, b0, b1, b2):
-    e_para = b0 + b2*x**2
-    depara_dx = 2*b2*x
+    e_para = b0*(1-(b2**2)*x**2)
+    depara_dx = -2.0*b0*x*b2**2
     depara_dy = tf.constant(0.0)
     depara_dz = tf.constant(0.0)
     return e_para, depara_dx, depara_dy, depara_dz

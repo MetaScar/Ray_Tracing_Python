@@ -17,19 +17,19 @@ boundingBox = Material([], "rect", [-0.20, 0.20, -0.20, 0.20, 0.0, 0.50], [], []
 
 # Define system materials:
 
-# Air in front of the lens:
+# Air in front of (and behind) the lens:
 a0_1 = tf.constant(1.0)
 a1_1 = tf.constant(0.0)
 a2_1 = tf.constant(0.0)
 
 # GRIN Lens material:
-a0_2 = tf.constant(2.25)
+a0_2 = tf.constant(16.0)
 a1_2 = tf.constant(0.0)
-a2_2 = tf.Variable(-60.685)
+a2_2 = tf.constant(5.19337)
 
 b0_2 = tf.constant(2.25)
 b1_2 = tf.constant(0.0)
-b2_2 = tf.constant(-60.685)
+b2_2 = tf.Variable(4.4262)
 
 c0_2 = tf.constant(0.0)
 c1_2 = tf.constant(0.0)
@@ -39,8 +39,8 @@ c2_2 = tf.constant(0.0)
 def objective_func(boundingBox, a0_1, a1_1, a2_1, a0_2, a1_2, a2_2, b0_2, b1_2, b2_2, c0_2, c1_2, c2_2):
 
     mat1 = Material(True, "rect", [-0.20, 0.20, -0.05, 0.05, 0.0, 0.05], a0_1, a1_1, a2_1, [], [], [], [], [], [])
-    mat2 = Material(False, "rect", [-0.20, 0.20, -0.05, 0.05, 0.05, 0.25], a0_2, a1_2, a2_2, b0_2, b1_2, b2_2, c0_2, c1_2, c2_2)
-    mat3 = Material(True, "rect", [-0.20, 0.20, -0.05, 0.05, 0.25, 0.50], a0_1, a1_1, a2_1, [], [], [], [], [], [])
+    mat2 = Material(False, "rect", [-0.20, 0.20, -0.05, 0.05, 0.05, 0.35], a0_2, a1_2, a2_2, b0_2, b1_2, b2_2, c0_2, c1_2, c2_2)
+    mat3 = Material(True, "rect", [-0.20, 0.20, -0.05, 0.05, 0.35, 0.50], a0_1, a1_1, a2_1, [], [], [], [], [], [])
 
     # Create list of materials:
     matList = [mat1, mat2, mat3]
@@ -57,15 +57,15 @@ def objective_func(boundingBox, a0_1, a1_1, a2_1, a0_2, a1_2, a2_2, b0_2, b1_2, 
     Ei_xpol = [tf.complex(tf.constant(0.0), tf.constant(1.0)), tf.constant(0.0, dtype=tf.complex64), tf.constant(0.0, dtype=tf.complex64)]
     incident_material = hp.getMaterialAtCoordinate(matList, incident_position)
     incident_ray = Ray(incident_position[0], incident_position[1], incident_position[2], pi[0], pi[1], pi[2], 1.0, Ei, incident_material, True)
-    ipRays.append(incident_ray)
+    #ipRays.append(incident_ray)
 
     incident_position = [tf.constant(0.02), tf.constant(0.0), tf.constant(0.0000001)]
     incident_ray2 = Ray(incident_position[0], incident_position[1], incident_position[2], pi[0], pi[1], pi[2], 1.0, Ei, incident_material, True)
-    ipRays.append(incident_ray2)
+    #ipRays.append(incident_ray2)
 
     incident_position = [tf.constant(0.03), tf.constant(0.0), tf.constant(0.0000001)]
     incident_ray3 = Ray(incident_position[0], incident_position[1], incident_position[2], pi[0], pi[1], pi[2], 1.0, Ei, incident_material, True)
-    ipRays.append(incident_ray3)
+    #ipRays.append(incident_ray3)
 
     incident_position = [tf.constant(-0.03), tf.constant(0.0), tf.constant(0.0000001)]
     incident_ray3 = Ray(incident_position[0], incident_position[1], incident_position[2], pi[0], pi[1], pi[2], 1.0, Ei, incident_material, True)
@@ -82,15 +82,15 @@ def objective_func(boundingBox, a0_1, a1_1, a2_1, a0_2, a1_2, a2_2, b0_2, b1_2, 
     # X-polarized rays:
     incident_position = [tf.constant(0.01), tf.constant(0.0), tf.constant(0.0000001)]
     incident_ray3 = Ray(incident_position[0], incident_position[1], incident_position[2], pi[0], pi[1], pi[2], 1.0, Ei_xpol, incident_material, True)
-    #ipRays.append(incident_ray3)
+    ipRays.append(incident_ray3)
 
     incident_position = [tf.constant(0.02), tf.constant(0.0), tf.constant(0.0000001)]
     incident_ray3 = Ray(incident_position[0], incident_position[1], incident_position[2], pi[0], pi[1], pi[2], 1.0, Ei_xpol, incident_material, True)
-    #ipRays.append(incident_ray3)
+    ipRays.append(incident_ray3)
 
     incident_position = [tf.constant(0.03), tf.constant(0.0), tf.constant(0.0000001)]
     incident_ray3 = Ray(incident_position[0], incident_position[1], incident_position[2], pi[0], pi[1], pi[2], 1.0, Ei_xpol, incident_material, True)
-    #ipRays.append(incident_ray3)
+    ipRays.append(incident_ray3)
 
     incident_position = [tf.constant(-0.01), tf.constant(0.0), tf.constant(0.0000001)]
     incident_ray3 = Ray(incident_position[0], incident_position[1], incident_position[2], pi[0], pi[1], pi[2], 1.0, Ei_xpol, incident_material, True)
@@ -137,7 +137,7 @@ def objective_func(boundingBox, a0_1, a1_1, a2_1, a0_2, a1_2, a2_2, b0_2, b1_2, 
                     ipRays.append(ray)
 
     ## Section 3 - Calculation of Objective (or Cost) Function:
-    f = of.focusObjective(cpRays, 0.35, 0.0, a0_2, a2_2)
+    f = of.focusObjective(cpRays, 0.45, 0.0, b0_2, b2_2)
     return f
 
 # Start timer:
@@ -154,14 +154,14 @@ input_3 = []
 input_4 = []
 input_5 = []
 
-for i in range(400):
+for i in range(30):
     with tf.GradientTape() as tape:
         current_objective = objective_func(boundingBox, a0_1, a1_1, a2_1, a0_2, a1_2, a2_2, b0_2, b1_2, b2_2, c0_2, c1_2, c2_2)
-    gradients = tape.gradient(current_objective, [a2_2])
+    gradients = tape.gradient(current_objective, [b2_2])
     # Keep track on inputs variables over time for analysis purposes:
-    input_3.append(a2_2.numpy())
+    input_1.append(b2_2.numpy())
 
-    optimizer.apply_gradients(zip(gradients, [a2_2]))
+    optimizer.apply_gradients(zip(gradients, [b2_2]))
 
     objectives.append(current_objective)
 
@@ -182,15 +182,10 @@ plt.savefig("Test Optimization")
 
 # Plot the input parameters as a function of iteration number:
 plt.figure()
-plt.plot(input_3)
+plt.plot(input_1)
 plt.xlabel("Iteration")
 plt.ylabel("C1")
 plt.show()
 
-#plt.figure()
-#plt.plot(input_4)
-#plt.xlabel("Iteration")
-#plt.ylabel("C4")
-#plt.show()
+print(input_1[-1])
 
-print(input_3[-1])
