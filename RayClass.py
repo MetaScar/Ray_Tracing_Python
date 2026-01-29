@@ -76,9 +76,9 @@ class Ray:
         # Isotropic-Isotropic Interface:
         if self.Mat.iso and currentMat.iso:
             # Find the indices of refraction at the boundary:
-            e_perp, _, _, _ = hp.getOrdinaryIndex(self.rx[-2], self.ry[-2], self.rz[-2], self.Mat.a0, self.Mat.a1, self.Mat.a2)
+            e_perp, _, _, _ = self.Mat.getOrdinaryPermittivity(self.rx[-2], self.ry[-2], self.rz[-2])
             no1 = tf.math.sqrt(e_perp)
-            e_perp, _, _, _ = hp.getOrdinaryIndex(self.rx[-1], self.ry[-1], self.rz[-1], currentMat.a0, currentMat.a1, currentMat.a2)
+            e_perp, _, _, _ = currentMat.getOrdinaryPermittivity(self.rx[-1], self.ry[-1], self.rz[-1])
             no2 = tf.math.sqrt(e_perp)
 
             p_r, p_t, E_r, E_t, S_r, S_t = ia.Isotropic_Isotropic(n, no1, no2, [self.px[-2], self.py[-2], self.pz[-2]], self.Efield[-2])
@@ -99,13 +99,13 @@ class Ray:
         # Isotropic-Anisotropic Interface:
         if self.Mat.iso and not(currentMat.iso):
             # Find the indices of refraction and optical axis at the boundary:
-            e_perp, _, _, _ = hp.getOrdinaryIndex(self.rx[-2], self.ry[-2], self.rz[-2], self.Mat.a0, self.Mat.a1, self.Mat.a2)
+            e_perp, _, _, _ = self.Mat.getOrdinaryPermittivity(self.rx[-2], self.ry[-2], self.rz[-2])
             no1 = tf.math.sqrt(e_perp)
-            e_perp, _, _, _ = hp.getOrdinaryIndex(self.rx[-1], self.ry[-1], self.rz[-1], currentMat.a0, currentMat.a1, currentMat.a2)
+            e_perp, _, _, _ = currentMat.getOrdinaryPermittivity(self.rx[-1], self.ry[-1], self.rz[-1])
             no2 = tf.math.sqrt(e_perp)
-            e_para, _, _, _ = hp.getExtraordinaryIndex(self.rx[-1], self.ry[-1], self.rz[-1], currentMat.b0, currentMat.b1, currentMat.b2)
+            e_para, _, _, _ = currentMat.getExtraordinaryPermittivity(self.rx[-1], self.ry[-1], self.rz[-1])
             ne2 = tf.math.sqrt(e_para)
-            o2, _, _, _, _, _, _, _, _, _ = hp.getDirector(self.rx[-1], self.ry[-1], self.rz[-1], currentMat.c0, currentMat.c1, currentMat.c2)
+            o2, _, _, _, _, _, _, _, _, _ = currentMat.getDirector(self.rx[-1], self.ry[-1], self.rz[-1])
 
             p_r, p_to, p_te, E_r, E_to, E_te, S_r, S_to, S_te = ia.Isotropic_Anisotropic(n, o2, no1, no2, ne2, [self.px[-2], self.py[-2], self.pz[-2]], self.Efield[-2])
             # Initialize the reflected ray:
@@ -130,13 +130,13 @@ class Ray:
         # Anisotropic-Isotropic Interface:
         if not(self.Mat.iso) and currentMat.iso:
             # Find the indices of refraction and optical axis at the boundary:
-            e_perp, _, _, _ = hp.getOrdinaryIndex(self.rx[-2], self.ry[-2], self.rz[-2], self.Mat.a0, self.Mat.a1, self.Mat.a2)
+            e_perp, _, _, _ = self.Mat.getOrdinaryPermittivity(self.rx[-2], self.ry[-2], self.rz[-2])
             no1 = tf.math.sqrt(e_perp)
-            e_para, _, _, _ = hp.getExtraordinaryIndex(self.rx[-2], self.ry[-2], self.rz[-2], self.Mat.b0, self.Mat.b1, self.Mat.b2)
+            e_para, _, _, _ = self.Mat.getExtraordinaryPermittivity(self.rx[-2], self.ry[-2], self.rz[-2])
             ne1 = tf.math.sqrt(e_para)
-            e_perp, _, _, _ = hp.getOrdinaryIndex(self.rx[-1], self.ry[-1], self.rz[-1], currentMat.a0, currentMat.a1, currentMat.a2)
+            e_perp, _, _, _ = currentMat.getOrdinaryPermittivity(self.rx[-1], self.ry[-1], self.rz[-1])
             no2 = tf.math.sqrt(e_perp)
-            o1, _, _, _, _, _, _, _, _, _ = hp.getDirector(self.rx[-2], self.ry[-2], self.rz[-2], self.Mat.c0, self.Mat.c1, self.Mat.c2)
+            o1, _, _, _, _, _, _, _, _, _ = self.Mat.getDirector(self.rx[-2], self.ry[-2], self.rz[-2])
             
             p_ro, p_re, p_t, E_ro, E_re, E_t, S_ro, S_re, S_t = ia.Anisotropic_Isotropic(n, o1, no1, ne1, no2, [self.px[-2], self.py[-2], self.pz[-2]], self.Efield[-2])
             # Initialize the reflected ordinary ray:
@@ -161,15 +161,15 @@ class Ray:
         # Anisotropic-Anisotropic Interface:
         if not(self.Mat.iso) and not(currentMat.iso):
             # Find the indices of refraction and optical axis at the boundary:
-            e_perp, _, _, _ = hp.getOrdinaryIndex(self.rx[-2], self.ry[-2], self.rz[-2], self.Mat.a0, self.Mat.a1, self.Mat.a2)
+            e_perp, _, _, _ = self.Mat.getOrdinaryPermittivity(self.rx[-2], self.ry[-2], self.rz[-2])
             no1 = tf.math.sqrt(e_perp)
-            e_para, _, _, _ = hp.getExtraordinaryIndex(self.rx[-2], self.ry[-2], self.rz[-2], self.Mat.b0, self.Mat.b1, self.Mat.b2)
+            e_para, _, _, _ = self.Mat.getExtraordinaryPermittivity(self.rx[-2], self.ry[-2], self.rz[-2])
             ne1 = tf.math.sqrt(e_para)
-            e_perp, _, _, _ = hp.getOrdinaryIndex(self.rx[-1], self.ry[-1], self.rz[-1], currentMat.a0, currentMat.a1, currentMat.a2)
+            e_perp, _, _, _ = currentMat.getOrdinaryPermittivity(self.rx[-1], self.ry[-1], self.rz[-1])
             no2 = tf.math.sqrt(e_perp)
-            e_para, _, _, _ = hp.getExtraordinaryIndex(self.rx[-1], self.ry[-1], self.rz[-1], currentMat.b0, currentMat.b1, currentMat.b2)
-            o1, _, _, _, _, _, _, _, _, _ = hp.getDirector(self.rx[-2], self.ry[-2], self.rz[-2], self.Mat.c0, self.Mat.c1, self.Mat.c2)
-            o2, _, _, _, _, _, _, _, _, _ = hp.getDirector(self.rx[-1], self.ry[-1], self.rz[-1], currentMat.c0, currentMat.c1, currentMat.c2)
+            e_para, _, _, _ = currentMat.getExtraordinaryPermittivity(self.rx[-1], self.ry[-1], self.rz[-1])
+            o1, _, _, _, _, _, _, _, _, _ = self.Mat.getDirector(self.rx[-2], self.ry[-2], self.rz[-2])
+            o2, _, _, _, _, _, _, _, _, _ = currentMat.getDirector(self.rx[-1], self.ry[-1], self.rz[-1])
             
             p_ro, p_re, p_to, p_te, E_ro, E_re, E_to, E_te, S_ro, S_re, S_to, S_te = ia.Anisotropic_Anisotropic(n, o1, o2, no1, ne1, no2, ne2, [self.px[-2], self.py[-2], self.pz[-2]], self.Efield[-2])
             # Initialize the reflected ordinary ray:

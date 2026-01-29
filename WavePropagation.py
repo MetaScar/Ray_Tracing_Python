@@ -11,8 +11,8 @@ def OrdinaryWavePropagation(rx_init, ry_init, rz_init, pox_init, poy_init, poz_i
 
     ko = 209.4395102 # For f = 10 GHz
 
-    # Calculate the derivatives of the index of refraction:
-    e_perp, deperp_dx, deperp_dy, deperp_dz = hp.getOrdinaryIndex(rx_init, ry_init, rz_init, mat.a0, mat.a1, mat.a2)
+    # Calculate the derivatives of the "ordinary" permittivity:
+    e_perp, deperp_dx, deperp_dy, deperp_dz = mat.getOrdinaryPermittivity(rx_init, ry_init, rz_init)
     
     # single step of the first-order Runge-Kutta method:
     k1 = deperp_dx
@@ -49,7 +49,7 @@ def OrdinaryWavePropagation(rx_init, ry_init, rz_init, pox_init, poy_init, poz_i
         Epol = [abs(x) for x in E] 
     else:
         # Calculate director (optical axis) as an intermediate step for calculating the electric polarization vector:
-        director, _, _, _, _, _, _, _, _, _ = hp.getDirector(rx_init, ry_init, rz_init, mat.c0, mat.c1, mat.c2)
+        director, _, _, _, _, _, _, _, _, _ = mat.getDirector(rx_init, ry_init, rz_init)
         # Calculate electric polarization vector:
         Epol = hp.getEfield([], [], pox, poy, poz, director, True)
     
@@ -69,11 +69,10 @@ def ExtraordinaryWavePropagation(rx_init, ry_init, rz_init, pex_init, pey_init, 
     ko = 209.4395102 # For f = 10 GHz
 
     # Calculates e_perp, e_paralell, and the associated spatial derivatives:
-    e_perp, deperp_dx, deperp_dy, deperp_dz = hp.getOrdinaryIndex(rx_init, ry_init, rz_init, mat.a0, mat.a1, mat.a2)
-    e_para, depara_dx, depara_dy, depara_dz = hp.getExtraordinaryIndex(rx_init, ry_init, rz_init, mat.b0, mat.b1, mat.b2)
-    
+    e_perp, deperp_dx, deperp_dy, deperp_dz = mat.getOrdinaryPermittivity(rx_init, ry_init, rz_init)
+    e_para, depara_dx, depara_dy, depara_dz = mat.getExtraordinaryPermittivity(rx_init, ry_init, rz_init)
     # Calculate the 'local' director (optical axis) and its derivatives:
-    d_local, ddx_x, ddx_y, ddx_z, ddy_x, ddy_y, ddy_z, ddz_x, ddz_y, ddz_z = hp.getDirector(rx_init, ry_init, rz_init, mat.c0, mat.c1, mat.c2)
+    d_local, ddx_x, ddx_y, ddx_z, ddy_x, ddy_y, ddy_z, ddz_x, ddz_y, ddz_z = mat.getDirector(rx_init, ry_init, rz_init)
 
     # Calculate the derivatives (k's) for each differential equation:
     k1 = -2*(e_para - e_perp)*tf.tensordot([pex_init, pey_init, pez_init], d_local, axes=1)*(pex_init*ddx_x + pey_init*ddy_x + pez_init*ddz_x) + e_perp*depara_dx + (e_para - (tf.norm([pex_init, pey_init, pez_init])**2))*deperp_dx - (depara_dx - deperp_dx)*(tf.tensordot([pex_init, pey_init, pez_init], d_local, axes=1))**2
@@ -108,7 +107,7 @@ def ExtraordinaryWavePropagation(rx_init, ry_init, rz_init, pex_init, pey_init, 
     Ephase = -1.0*prev_phase + delta_phi
 
     # Calculate director (optical axis) as an intermediate step for calculating the electric polarization vector:
-    director, _, _, _, _, _, _, _, _, _ = hp.getDirector(rx_init, ry_init, rz_init, mat.c0, mat.c1, mat.c2)
+    director, _, _, _, _, _, _, _, _, _ = mat.getDirector(rx_init, ry_init, rz_init)
     # Calculate electric polarization vector:
     Epol = hp.getEfield(tf.math.sqrt(e_perp), tf.math.sqrt(e_para), pex, pey, pez, director, False)
     # Account for phase progression:

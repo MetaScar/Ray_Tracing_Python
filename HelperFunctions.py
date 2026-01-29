@@ -140,7 +140,13 @@ def getMaterialAtCoordinate(materials, coordinate):
                 actual_material = element
                 break
         return actual_material
-
+    # This only work for two cylinders. The first cylinder must be at the origin.
+    if materials[0].type == "cylinder":
+        r = tf.math.sqrt(x**2 + y**2)
+        if(r>=materials[0].rmin) and (r<=materials[0].rmax) and (z>materials[0].hmin) and (z<materials[0].hmax):
+            return materials[0]
+        else:
+            return materials[1]
 
 # This function takes in a position (x,y,z) and returns True if the point is within the bouding box, False if outside the bounding box.
 # This code works for either rectangular slabs or concentric spheres (all materials must be the same type!)    
@@ -159,10 +165,15 @@ def checkBoundary(boundingBox, coordinate):
             return True
         else:
             return False
+    if boundingBox.type == "cylinder":
+        r = tf.math.sqrt(x**2 + y**2)
+        if (r<boundingBox.rmax) and (r>boundingBox.rmin) and (z<boundingBox.hmax) and (z>boundingBox.hmin):
+            return True
+        else:
+            return False
     
-
 # This function takes in a current Material and a previous material and calculates the surface normal unit vector.
-# This code works for either rectangular slabs or concentric spheres (all materials must be the same type!)    
+# This code works for rectangular slabs, concentric spheres, or "concentric" cylinders (all materials must be the same type!)    
 def getSurfaceNormal(currentMat, prevMat, coordinate):
     if currentMat.type == "rect":
         if currentMat.zmax >= prevMat.zmax:
@@ -174,6 +185,21 @@ def getSurfaceNormal(currentMat, prevMat, coordinate):
             return [coordinate[0].numpy(), coordinate[1].numpy(), coordinate[2].numpy()]/(-1.0*tf.norm(coordinate).numpy())
         else:
             return [coordinate[0].numpy(), coordinate[1].numpy(), coordinate[2].numpy()]/tf.norm(coordinate).numpy()
+    if currentMat.type == "cylinder":
+        if prevMat.rmax > currentMat.rmax:
+            min_zdistance = tf.minimum(abs(currentMat.hmax - coordinate[2]), abs(currentMat.hmin - coordinate[2]))
+            min_rdistance = currentMat.rmax - tf.math.sqrt(coordinate[0]**2 + coordinate[1]**2)
+            if min_zdistance < min_rdistance:
+                return [0.0, 0.0, -1.0*coordinate[2].numpy()]/tf.norm([0.0, 0.0, coordinate[2].numpy()])
+            else:
+                return [-1.0*coordinate[0].numpy(), -1.0*coordinate[1].numpy(), 0.0]/tf.norm([coordinate[0].numpy(), coordinate[1].numpy(), 0.0])
+        else:
+            min_zdistance = tf.minimum(abs(prevMat.hmax - coordinate[2]), abs(prevMat.hmin - coordinate[2]))
+            min_rdistance = abs(-1.0*prevMat.rmax + tf.math.sqrt(coordinate[0]**2 + coordinate[1]**2))
+            if min_zdistance < min_rdistance:
+                return [0.0, 0.0, coordinate[2].numpy()]/tf.norm([0.0, 0.0, coordinate[2].numpy()])
+            else:
+                return [coordinate[0].numpy(), coordinate[1].numpy(), 0.0]/tf.norm([coordinate[0].numpy(), coordinate[1].numpy(), 0.0])
 
 # This function calculates the cross product of two, in general complex, 1x3 vectors.
 def cross(a, b):
