@@ -86,35 +86,74 @@ def rayPropagation(positions, wave_normals, Efields, ordinary, alive, ordinary_c
 # Another important note: The permittivity distriubtion is passed into a "softplus" function to ensure er >= 1, always.
 def getOrdinaryPermittivities(positions, ordinary_constants):
 
-    # 4th-degree polynomial as a function of x:
-    x = positions[:, 0] # for readability
-    g = ordinary_constants[:, 0] + ordinary_constants[:, 1]*x + ordinary_constants[:, 2]*x**2 + ordinary_constants[:, 3]*x**3 + ordinary_constants[:, 4]*x**4 # g is an intermediate parameterization
+    # # 4th-degree polynomial as a function of x:
+    # x = positions[:, 0] # for readability
+    # g = ordinary_constants[:, 0] + ordinary_constants[:, 1]*x + ordinary_constants[:, 2]*x**2 + ordinary_constants[:, 3]*x**3 + ordinary_constants[:, 4]*x**4 # g is an intermediate parameterization
+    # e_perp = 1 + tf.math.softplus(g)
+    # deperp_dx = tf.math.sigmoid(g)*(ordinary_constants[:, 1] + 2.0*ordinary_constants[:, 2]*x + 3.0*ordinary_constants[:, 3]*x**2 + 4.0*ordinary_constants[:, 4]*x**3)
+    # deperp_dy = tf.zeros(tf.shape(positions)[0])
+    # deperp_dz = tf.zeros(tf.shape(positions)[0])
+    # return e_perp, deperp_dx, deperp_dy, deperp_dz
+
+    # Quadractic as a function of rho:
+    x = positions[:, 0]
+    y = positions[:, 1] 
+    rho = x**2 + y**2 
+    e_max = ordinary_constants[:, 0] 
+    rho_max = ordinary_constants[:, 1]
+    alpha = ordinary_constants[:, 2] # for readability
+    g = e_max*(1 - alpha*(rho/rho_max)**2) # g is an intermediate variable
     e_perp = 1 + tf.math.softplus(g)
-    deperp_dx = tf.math.sigmoid(g)*(ordinary_constants[:, 1] + 2.0*ordinary_constants[:, 2]*x + 3.0*ordinary_constants[:, 3]*x**2 + 4.0*ordinary_constants[:, 4]*x**3)
-    deperp_dy = tf.zeros(tf.shape(positions)[0])
+    deperp_dx = tf.math.sigmoid(g)*(-2.0*e_max*alpha*x/rho_max)
+    deperp_dy = tf.math.sigmoid(g)*(-2.0*e_max*alpha*y/rho_max)
     deperp_dz = tf.zeros(tf.shape(positions)[0])
+
     return e_perp, deperp_dx, deperp_dy, deperp_dz
 
 # Similar to getOrdinaryPermittivities but for the extraordinary case.
 def getExtraordinaryPermittivities(positions, extraordinary_constants):
 
-    # 4th-degree polynomial as a function of x:
-    x = positions[:, 0] # for readability
-    g = extraordinary_constants[:, 0] + extraordinary_constants[:, 1]*x + extraordinary_constants[:, 2]*x**2 + extraordinary_constants[:, 3]*x**3 + extraordinary_constants[:, 4]*x**4 # g is an intermediate parameterization
-    e_para = 1 + tf.math.softplus(g)
-    depara_dx = tf.math.sigmoid(g)*(extraordinary_constants[:, 1] + 2.0*extraordinary_constants[:, 2]*x + 3.0*extraordinary_constants[:, 3]*x**2 + 4.0*extraordinary_constants[:, 4]*x**3)
+    # # 4th-degree polynomial as a function of x:
+    # x = positions[:, 0] # for readability
+    # g = extraordinary_constants[:, 0] + extraordinary_constants[:, 1]*x + extraordinary_constants[:, 2]*x**2 + extraordinary_constants[:, 3]*x**3 + extraordinary_constants[:, 4]*x**4 # g is an intermediate parameterization
+    # e_para = 1 + tf.math.softplus(g)
+    # depara_dx = tf.math.sigmoid(g)*(extraordinary_constants[:, 1] + 2.0*extraordinary_constants[:, 2]*x + 3.0*extraordinary_constants[:, 3]*x**2 + 4.0*extraordinary_constants[:, 4]*x**3)
+    # depara_dy = tf.zeros(tf.shape(positions)[0])
+    # depara_dz = tf.zeros(tf.shape(positions)[0])
+    # return e_para, depara_dx, depara_dy, depara_dz
+
+    # Constant value (given by the first constant):
+    e_para = extraordinary_constants[:, 0]
+    depara_dx = tf.zeros(tf.shape(positions)[0])
     depara_dy = tf.zeros(tf.shape(positions)[0])
     depara_dz = tf.zeros(tf.shape(positions)[0])
+
     return e_para, depara_dx, depara_dy, depara_dz
 
 # Similar to getOrdinaryPermittivites, however there are 10 items returned:
 # The director profile (size 3 tensor), as well as the nine spatial derivatives (three for each director component).
 def getDirector(positions, director_constants):
 
-    # Constant x:
-    dx = tf.ones(tf.shape(positions)[0])
+    # # Constant x:
+    # dx = tf.ones(tf.shape(positions)[0])
+    # dy = tf.zeros(tf.shape(positions)[0])
+    # dz = tf.zeros(tf.shape(positions)[0])
+    # director = tf.stack([dx, dy, dz], axis=1)
+    
+    # ddx_x = tf.zeros(tf.shape(positions)[0])
+    # ddx_y = tf.zeros(tf.shape(positions)[0])
+    # ddx_z = tf.zeros(tf.shape(positions)[0])
+    # ddy_x = tf.zeros(tf.shape(positions)[0])
+    # ddy_y = tf.zeros(tf.shape(positions)[0])
+    # ddy_z = tf.zeros(tf.shape(positions)[0])
+    # ddz_x = tf.zeros(tf.shape(positions)[0])
+    # ddz_y = tf.zeros(tf.shape(positions)[0])
+    # ddz_z = tf.zeros(tf.shape(positions)[0])
+
+    # Constant z:
+    dx = tf.zeros(tf.shape(positions)[0])
     dy = tf.zeros(tf.shape(positions)[0])
-    dz = tf.zeros(tf.shape(positions)[0])
+    dz = tf.ones(tf.shape(positions)[0])
     director = tf.stack([dx, dy, dz], axis=1)
     
     ddx_x = tf.zeros(tf.shape(positions)[0])
@@ -157,11 +196,11 @@ def getEfield(e_perp, e_para, wave_normals, directors, ordinary):
 def checkBoundary(positions, boundingBox, current_alive):
     
     # # Cylindrical:
-    # r = tf.math.sqrt(positions[:, 0]**2 + positions[:, 1]**2)
-    # z = positions[:, 2]
-    # alive = tf.logical_and(tf.logical_and(r<=boundingBox[1], r>=boundingBox[0]), tf.logical_and(z<=boundingBox[3], z>=boundingBox[2]))
-    # alive = tf.logical_and(alive, current_alive) # To ensure previously "dead" rays do not because "alive" again
-    # return alive
+    r = tf.math.sqrt(positions[:, 0]**2 + positions[:, 1]**2)
+    z = positions[:, 2]
+    alive = tf.logical_and(tf.logical_and(r<=boundingBox[1], r>=boundingBox[0]), tf.logical_and(z<=boundingBox[3], z>=boundingBox[2]))
+    alive = tf.logical_and(alive, current_alive) # To ensure previously "dead" rays do not because "alive" again
+    return alive
  
     # Spherical:
     # r = tf.math.sqrt(positions[:, 0]**2 + positions[:, 1]**2 + positions[:, 2]**2)
@@ -170,12 +209,12 @@ def checkBoundary(positions, boundingBox, current_alive):
     # return alive
 
     # Rectangular Prism Slabs:
-    x = positions[:, 0]
-    y = positions[:, 1]
-    z = positions[:, 2]
-    alive = tf.logical_and(tf.logical_and(x>=boundingBox[0], x<=boundingBox[1]), tf.logical_and(tf.logical_and(y>=boundingBox[2], y<=boundingBox[3]) , tf.logical_and(z>=boundingBox[4], z<=boundingBox[5])))
-    alive = tf.logical_and(alive, current_alive) # To ensure previously "dead" rays do not because "alive" again
-    return alive
+    # x = positions[:, 0]
+    # y = positions[:, 1]
+    # z = positions[:, 2]
+    # alive = tf.logical_and(tf.logical_and(x>=boundingBox[0], x<=boundingBox[1]), tf.logical_and(tf.logical_and(y>=boundingBox[2], y<=boundingBox[3]) , tf.logical_and(z>=boundingBox[4], z<=boundingBox[5])))
+    # alive = tf.logical_and(alive, current_alive) # To ensure previously "dead" rays do not because "alive" again
+    # return alive
 
 
 # Given a tensor of positions and a tensor of material IDs (in the forms of integers), this function
@@ -187,34 +226,37 @@ def checkForHit(positions, material_IDs, geometry_vectors):
 
 # Given a tensor of positions (Nx3) and a list of geometry vectors, this function returns a tensor of integers corresponding 
 # to the material associated with each position.
+# The type of geometry used must be MANUALLY UNCOMMENTED when switches materials.
+# Only one type of material is supported in a simulation.
+# See the "MaterialClass.py" file for how to properly defined geometry vectors for each type of geometry.
 def getMaterialsAtCoordinates(positions, geometry_vectors):
     x = positions[:, 0]
     y = positions[:, 1]
     z = positions[:, 2]
 
     # Rectangular Prism Slabs:
-    x = tf.expand_dims(x, axis=1)
-    y = tf.expand_dims(y, axis=1)
-    z = tf.expand_dims(z, axis=1)
+    # x = tf.expand_dims(x, axis=1)
+    # y = tf.expand_dims(y, axis=1)
+    # z = tf.expand_dims(z, axis=1)
 
-    xmin = tf.expand_dims(geometry_vectors[:, 0], axis=0)
-    xmax = tf.expand_dims(geometry_vectors[:, 1], axis=0)
-    ymin = tf.expand_dims(geometry_vectors[:, 2], axis=0)
-    ymax = tf.expand_dims(geometry_vectors[:, 3], axis=0)
-    zmin = tf.expand_dims(geometry_vectors[:, 4], axis=0)
-    zmax = tf.expand_dims(geometry_vectors[:, 5], axis=0)
+    # xmin = tf.expand_dims(geometry_vectors[:, 0], axis=0)
+    # xmax = tf.expand_dims(geometry_vectors[:, 1], axis=0)
+    # ymin = tf.expand_dims(geometry_vectors[:, 2], axis=0)
+    # ymax = tf.expand_dims(geometry_vectors[:, 3], axis=0)
+    # zmin = tf.expand_dims(geometry_vectors[:, 4], axis=0)
+    # zmax = tf.expand_dims(geometry_vectors[:, 5], axis=0)
 
-    mask = tf.logical_and(tf.logical_and(x>=xmin, x<=xmax), tf.logical_and(tf.logical_and(y>=ymin, y<=ymax) , tf.logical_and(z>=zmin, z<=zmax)))
-    indices = tf.argmax(tf.cast(mask, tf.int32), axis=1)
-    indices = tf.cast(indices, dtype=tf.int32)
-    return indices
+    # mask = tf.logical_and(tf.logical_and(x>=xmin, x<=xmax), tf.logical_and(tf.logical_and(y>=ymin, y<=ymax) , tf.logical_and(z>=zmin, z<=zmax)))
+    # indices = tf.argmax(tf.cast(mask, tf.int32), axis=1)
+    # indices = tf.cast(indices, dtype=tf.int32)
+    # return indices
 
     # Cylinders:
     # Note - This only works for two cylinders. The first cylinder must be at the origin.
-    # r = tf.math.sqrt(x**2 + y**2)
-    # cond = tf.logical_and(tf.logical_and(r>=geometry_vectors[0][0], r<=geometry_vectors[0][1]), tf.logical_and(z>=geometry_vectors[0][2], z<=geometry_vectors[0][3]))
-    # cond = tf.cast(tf.logical_not(cond), dtype=tf.int32)
-    # return cond
+    r = tf.math.sqrt(x**2 + y**2)
+    cond = tf.logical_and(tf.logical_and(r>=geometry_vectors[0][0], r<=geometry_vectors[0][1]), tf.logical_and(z>=geometry_vectors[0][2], z<=geometry_vectors[0][3]))
+    cond = tf.cast(tf.logical_not(cond), dtype=tf.int32)
+    return cond
 
     # Spheres:
     # r = tf.math.sqrt(x**2 + y**2 + z**2)
@@ -237,15 +279,15 @@ def getSurfaceNormals(currMatIDs, prevMatIDs, geometry_vectors, positions):
     ray_previous_geometry_vectors = tf.gather(geometry_vectors, prevMatIDs)
 
 # Rectangular Prism Slabs:
-    mask = ray_current_geometry_vectors[:, 5] >= ray_previous_geometry_vectors[:, 5]
-    mask = tf.expand_dims(mask, axis=1)
-    length_positions = tf.shape(positions)[0]
-    zhat = tf.constant([[0.0, 0.0, 1.0]])
-    zhat = tf.repeat(zhat, length_positions, axis=0)
-    minus_zhat = tf.constant([[0.0, 0.0, -1.0]])
-    minus_zhat = tf.repeat(minus_zhat, length_positions, axis=0)
-    surface_normal = tf.where(mask, zhat, minus_zhat) # If currentMat.zmax > prevMat.zmax, return [0,0,1], otherwise return [0,0,-1]
-    return surface_normal
+    # mask = ray_current_geometry_vectors[:, 5] >= ray_previous_geometry_vectors[:, 5]
+    # mask = tf.expand_dims(mask, axis=1)
+    # length_positions = tf.shape(positions)[0]
+    # zhat = tf.constant([[0.0, 0.0, 1.0]])
+    # zhat = tf.repeat(zhat, length_positions, axis=0)
+    # minus_zhat = tf.constant([[0.0, 0.0, -1.0]])
+    # minus_zhat = tf.repeat(minus_zhat, length_positions, axis=0)
+    # surface_normal = tf.where(mask, zhat, minus_zhat) # If currentMat.zmax > prevMat.zmax, return [0,0,1], otherwise return [0,0,-1]
+    # return surface_normal
     
 # Spheres:
     # mask = ray_previous_geometry_vectors[:, 4] >= ray_current_geometry_vectors[:, 4]
@@ -257,26 +299,26 @@ def getSurfaceNormals(currMatIDs, prevMatIDs, geometry_vectors, positions):
     
 # Cylinders:
 # Note - This only works for two cylinders. The first cylinder must be at the origin.
-    # mask1 = ray_previous_geometry_vectors[:, 1] >= ray_current_geometry_vectors[:, 1]
-    # mask1 = tf.expand_dims(mask1, axis=1)
+    mask1 = ray_previous_geometry_vectors[:, 1] >= ray_current_geometry_vectors[:, 1]
+    mask1 = tf.expand_dims(mask1, axis=1)
     
-    # min_zdistance1 = tf.minimum(tf.math.abs(ray_current_geometry_vectors[:, 3] - positions[:, 2]), tf.math.abs(ray_current_geometry_vectors[:, 2] - positions[:, 2]))
-    # min_zdistance2 = tf.minimum(tf.math.abs(ray_previous_geometry_vectors[:, 3] - positions[:, 2]), tf.math.abs(ray_previous_geometry_vectors[:, 2] - positions[:, 2]))
-    # min_zdistance = tf.minimum(min_zdistance1, min_zdistance2)
-    # min_rdistance1 = ray_current_geometry_vectors[:, 1] - tf.math.sqrt(tf.square(positions[:, 0]) + tf.square(positions[:, 1]))
-    # min_rdistance2 = ray_previous_geometry_vectors[:, 1] - tf.math.sqrt(tf.square(positions[:, 0]) + tf.square(positions[:, 1]))
-    # min_rdistance = tf.minimum(min_rdistance1, min_rdistance2)
+    min_zdistance1 = tf.minimum(tf.math.abs(ray_current_geometry_vectors[:, 3] - positions[:, 2]), tf.math.abs(ray_current_geometry_vectors[:, 2] - positions[:, 2]))
+    min_zdistance2 = tf.minimum(tf.math.abs(ray_previous_geometry_vectors[:, 3] - positions[:, 2]), tf.math.abs(ray_previous_geometry_vectors[:, 2] - positions[:, 2]))
+    min_zdistance = tf.minimum(min_zdistance1, min_zdistance2)
+    min_rdistance1 = ray_current_geometry_vectors[:, 1] - tf.math.sqrt(tf.square(positions[:, 0]) + tf.square(positions[:, 1]))
+    min_rdistance2 = ray_previous_geometry_vectors[:, 1] - tf.math.sqrt(tf.square(positions[:, 0]) + tf.square(positions[:, 1]))
+    min_rdistance = tf.minimum(min_rdistance1, min_rdistance2)
 
-    # mask2 = min_zdistance < min_rdistance
-    # mask2 = tf.expand_dims(mask2, axis=1)
-    # zhat = tf.stack([0.0*positions[:, 0], 0.0*positions[:, 1], positions[:, 2]], axis=1)
-    # zhat = zhat/tf.expand_dims(tf.math.abs(positions[:, 2]), axis=1)
-    # rhat = tf.stack([positions[:, 0], positions[:, 1], 0.0*positions[:, 2]], axis=1)
-    # rhat = rhat/tf.expand_dims(tf.norm(rhat, axis=1), axis=1)
+    mask2 = min_zdistance < min_rdistance
+    mask2 = tf.expand_dims(mask2, axis=1)
+    zhat = tf.stack([0.0*positions[:, 0], 0.0*positions[:, 1], positions[:, 2]], axis=1)
+    zhat = zhat/tf.expand_dims(tf.math.abs(positions[:, 2]), axis=1)
+    rhat = tf.stack([positions[:, 0], positions[:, 1], 0.0*positions[:, 2]], axis=1)
+    rhat = rhat/tf.expand_dims(tf.norm(rhat, axis=1), axis=1)
 
-    # unit_vector = tf.where(mask2, zhat, rhat)
-    # surface_normal = tf.where(mask1, -1.0*unit_vector, unit_vector)
-    # return surface_normal
+    unit_vector = tf.where(mask2, zhat, rhat)
+    surface_normal = tf.where(mask1, -1.0*unit_vector, unit_vector)
+    return surface_normal
 
 ### ----------------------------- Interface Analysis Functions ------------------------------------------- ###
 
@@ -798,6 +840,12 @@ def findTransmittedNormals(no, ne, p_tn, n):
 
 def createStartingRays(NumberOfRays, starting_x, ending_x, fixed_z, angle, Epol, mat_ordinary_consts, mat_extraordinary_consts, mat_director_consts):
     angle = angle*(.0174532925) # Convert the angle from degrees to radians
+
+    # Offset the initial position of the rays such that they INTERSECT the lens at the given starting_x and ending_x:
+    # THIS IS FOR THE SPECIFIC 1D RECTANGULAR SLAB LENS EXAMPLE:
+    starting_x = starting_x - (0.05 - fixed_z)*tf.math.tan(angle)
+    ending_x = ending_x - (0.05 - fixed_z)*tf.math.tan(angle)
+
     positions = tf.linspace([starting_x, 0.0, fixed_z], [ending_x, 0.0, fixed_z], NumberOfRays)
     px = tf.math.sin(angle)
     py = 0.0
@@ -822,42 +870,210 @@ def createStartingRays(NumberOfRays, starting_x, ending_x, fixed_z, angle, Epol,
 
     return positions, wave_vectors, PoyntingMag, alive, Efields, ordinary, material_IDs, ray_ordinary_consts, ray_extraordinary_consts, ray_director_consts
 
+# Given a number of rays to create, the maximum theta angle, the position of the sphere center, and an integer describing
+# the polarization of the rays, this function returns all the tensors needed to intialize the spherical cap of rays.
+def createIsotropicRays(NumberOfRays, theta_max_deg, theta_target_deg, sphere_center, Epol, mat_ordinary_consts, mat_extraordinary_consts, mat_director_consts, group_ID):
+
+    ### Step 1 - Calculate the wave vectors:
+    N = NumberOfRays # Number of rays
+    N = tf.cast(N, dtype=tf.float32)
+    
+    # Convert theta_max, theta_target_deg to radians:
+    theta_max = theta_max_deg*.0174532925
+    theta_target = theta_target_deg*.0174532925
+
+    # Calculate a minimum z value based on theta_max:
+    z_min = tf.cos(theta_max)
+
+    # The "golden angle":
+    golden_angle = 2.39998
+
+    i = tf.range(N) # i = [0, 1, ..., N-1]
+
+    u = (i + 0.5)/N
+
+    # Sample uniformly between z_min and 1:
+    z = z_min + (1.0 - z_min) * u
+
+    r = tf.sqrt(1.0 - z*z)
+    phi = i*golden_angle
+
+    x = r*tf.cos(phi)
+    y = r*tf.sin(phi)
+
+    # Calculate a list of wave vectors of the incident rays:
+    wave_vectors = tf.stack([x, y, z], axis=1)
+
+    # Next, we rotate the wave_vectors based on the desired theta angle:
+    target_direction = [tf.math.sin(theta_target), 0.0, tf.math.cos(theta_target)]
+    target_direction = tf.expand_dims(target_direction, axis=0)
+    target_direction = tf.tile(target_direction, [NumberOfRays, 1])
+
+    rotation_matrix = findRotationMatrix(target_direction)
+    wave_vectors = tf.linalg.matmul(tf.linalg.inv(rotation_matrix),tf.expand_dims(wave_vectors, axis=-1))
+    wave_vectors = tf.squeeze(wave_vectors, axis=-1)
+
+    ### Step 2 - Calculate the electric polarization vector (either phi or theta polarized):
+    # Ephi = tf.stack([-1.0*tf.sin(phi), tf.cos(phi), tf.zeros_like(phi)]/tf.linalg.norm([-1.0*tf.sin(phi), tf.cos(phi), tf.zeros_like(phi)]), axis=1)
+    # Etheta = tf.linalg.cross(Ephi, wave_vectors)/tf.expand_dims(tf.linalg.norm(tf.linalg.cross(Ephi, wave_vectors), axis=1), axis=1)
+
+    # If Epol = 0 use Ephi, if Epol = 1 use Etheta:
+    # Efields = (Epol - 1.0)*Ephi + Epol*Etheta
+
+    ### Constant Epol model:
+    Efields  = tf.expand_dims(Epol, axis=0)
+    Efields = tf.tile(Efields, [NumberOfRays, 1])
+
+    ### Step 3 - Calculate all other quantities:
+    sphere_center = tf.expand_dims(sphere_center, axis=0)
+    positions = tf.tile(sphere_center, [NumberOfRays, 1])
+    PoyntingMag = tf.ones([NumberOfRays], dtype=tf.float32)
+    alive = tf.ones([NumberOfRays], dtype=tf.bool)
+    ordinary = tf.ones([NumberOfRays], dtype=tf.bool)
+    material_IDs = tf.ones([NumberOfRays], dtype=tf.int32)
+    group_IDs = tf.fill([NumberOfRays], group_ID)
+
+    ray_ordinary_consts = tf.expand_dims(mat_ordinary_consts[1], axis=0)
+    ray_extraordinary_consts = tf.expand_dims(mat_extraordinary_consts[1], axis=0)
+    ray_director_consts = tf.expand_dims(mat_director_consts[1], axis=0)
+
+    ray_ordinary_consts = tf.tile(ray_ordinary_consts, [NumberOfRays, 1])
+    ray_extraordinary_consts = tf.tile(ray_extraordinary_consts, [NumberOfRays, 1])
+    ray_director_consts = tf.tile(ray_director_consts, [NumberOfRays, 1])
+
+    return positions, wave_vectors, PoyntingMag, alive, Efields, ordinary, material_IDs, ray_ordinary_consts, ray_extraordinary_consts, ray_director_consts, group_IDs
+
 ### ----------------------------- Everything below this line may need to be rewritten -------------------------------------------------------- ###
 
 # This functions takes in a tensor of ray positions and a target focal point, and returns a size N
 # tensor where for each ray the element represents the minimum distance SQUARED to the specified focal point.
-def minDistanceToPoint(positions, focal_point):
+# This function is currently not being used.
+# def minDistanceToPoint(positions, focal_point, wave_vectors):
 
-    # Reshape focal point to (1, 3, 1) for broadcasting:
-    focal_point = tf.reshape(focal_point, (1, 3, 1))
+#     # Reshape focal point to (1, 3, 1) for broadcasting:
+#     focal_point = tf.reshape(focal_point, (1, 3, 1))
 
-    # Calculate squared difference: (x-x0)^2, (y-y0)^2, (z-z0)^2
-    squared_diff = tf.square(positions - focal_point) # Shape: (N, 3, SIZE)
+#     # Calculate squared difference: (x-x0)^2, (y-y0)^2, (z-z0)^2
+#     squared_diff = tf.square(positions - focal_point) # Shape: (N, 3, SIZE)
 
-    # Sum across coordinate dimension to get squared Euclidean distance:
-    distance_squared = tf.reduce_sum(squared_diff, axis=1) # Shape: (N, SIZE)
+#     # Sum across coordinate dimension to get squared Euclidean distance:
+#     distance_squared = tf.reduce_sum(squared_diff, axis=1) # Shape: (N, SIZE)
 
-    # Find the minimum squared distance across time (axis 1):
-    min_dist_sq = tf.reduce_min(distance_squared, axis=1) # Shape: (N,)
+#     # For each ray, find the STEP at which the distanced squared is a minimum:
+#     min_indices = tf.math.argmin(distance_squared, axis=1)
 
-    return min_dist_sq
+#     # Extract the positions and trajectories corresponding to the STEPs at which the distance to the focal point:
+#     closest_positions = tf.gather(positions, min_indices, axis=2, batch_dims=1)
+#     closest_trajects = tf.gather(wave_vectors, min_indices, axis=2, batch_dims=1)
+
+#     # Calculate the ray positions (x and y) corresponding to where the rays intersect the focal plane:
+#     t = (focal_plane - closest_positions[:, 2])/closest_trajects[:, 2] # "Time" for which each ray intersects the z=constant plane.
+#     xpos = closest_positions[:, 0] + t*closest_trajects[:, 0]
+#     ypos = closest_positions[:, 1] + t*closest_trajects[:, 1]
+
+#     # Calculate the variance for both the x positions and y positions:
+#     var_x = tf.math.reduce_variance(xpos)
+#     var_y = tf.math.reduce_variance(ypos)
+
+#     loss = var_x + var_y
+
+#     return loss
+
+
+# This loss function returns the sum of the variances of the wave vectors of the output rays.
+# Each group of rays corresponding to a particular feed has its variance calculated seperately.
+def planeWaveObjective(wave_vectors, group_IDs, material_IDs, Num_Starting_Rays):
+
+    # First, we eliminate the starting rays from consideration:
+    N = Num_Starting_Rays
+    wave_vectors = wave_vectors[N:]
+    group_IDs = group_IDs[N:]
+    material_IDs = material_IDs[N:]
+
+    # Next, we only consider rays propagating in air (outside the lens):
+    material_mask = material_IDs == 1
+    wave_vectors = tf.boolean_mask(wave_vectors, material_mask)
+    group_IDs = tf.boolean_mask(group_IDs, material_mask)
+    
+    # Now, we for Group ID we calculate the variance of the wave vectors.
+    # Note that the wave vectors should be the same for every time step (straight line ray propagation in air).
+
+    # Extract the wave_vectors of group 1:
+    wvG1 = tf.boolean_mask(wave_vectors, group_IDs == 1)
+    # Find the first non-zero wave vector:
+    is_nonzero = tf.reduce_any(tf.not_equal(wvG1, 0), axis=1)
+    first_indices = tf.argmax(tf.cast(is_nonzero, tf.int32), axis=1)
+    wvG1 = tf.gather(wvG1, first_indices, batch_dims=1, axis=2)
+    # Calculate the variance for each vector component and then sum:
+    var1 = tf.math.reduce_variance(wvG1, axis=0)
+    var1 = tf.reduce_sum(var1)
+
+    # Extract the wave_vectors of group 2:
+    wvG2 = tf.boolean_mask(wave_vectors, group_IDs == 2)
+    # Find the first non-zero wave vector:
+    is_nonzero = tf.reduce_any(tf.not_equal(wvG2, 0), axis=1)
+    first_indices = tf.argmax(tf.cast(is_nonzero, tf.int32), axis=1)
+    wvG2 = tf.gather(wvG2, first_indices, batch_dims=1, axis=2)
+    # Calculate the variance for each vector component and then sum:
+    var2 = tf.math.reduce_variance(wvG2, axis=0)
+    var2 = tf.reduce_sum(var2)# Find the first non-zero wave vector:
+
+    # Extract the wave_vectors of group 3:
+    wvG3 = tf.boolean_mask(wave_vectors, group_IDs == 3)
+    # Find the first non-zero wave vector:
+    is_nonzero = tf.reduce_any(tf.not_equal(wvG3, 0), axis=1)
+    first_indices = tf.argmax(tf.cast(is_nonzero, tf.int32), axis=1)
+    wvG3 = tf.gather(wvG3, first_indices, batch_dims=1, axis=2)
+    # Calculate the variance for each vector component and then sum:
+    var3 = tf.math.reduce_variance(wvG3, axis=0)
+    var3 = tf.reduce_sum(var3)
+
+    # Extract the wave_vectors of group 4:
+    wvG4 = tf.boolean_mask(wave_vectors, group_IDs == 4)
+    # Find the first non-zero wave vector:
+    is_nonzero = tf.reduce_any(tf.not_equal(wvG4, 0), axis=1)
+    first_indices = tf.argmax(tf.cast(is_nonzero, tf.int32), axis=1)
+    wvG4 = tf.gather(wvG4, first_indices, batch_dims=1, axis=2)
+    # Calculate the variance for each vector component and then sum:
+    var4 = tf.math.reduce_variance(wvG4, axis=0)
+    var4 = tf.reduce_sum(var4)
+
+    # Compute overall variance as the sum of the variances from each group of rays.
+    # This is the loss.
+    loss = var1 + var2 + var3 + var4
+    return loss
 
 # This objective function rewards rays for passing nearby a specified focal point.
 # It is converted to a loss function by making the reward negative.
-
-def focusObjective(positions, focal_point, material_IDs):
+def focusObjective(positions, wave_vectors, material_IDs, focal_plane):
     
     # Only consider rays propagating in the air past the lens.
     # A boolean mask must be applied to positions to achieve this:
     material_mask = material_IDs == 2
 
-    # For each ray, calculate the minimum distance squared to the focal point:
-    min_dist_sq = minDistanceToPoint(positions, focal_point)
+    # Apply the boolean mask to positions and wave_vectors:
+    positions = tf.boolean_mask(positions, material_mask)
+    wave_vectors = tf.boolean_mask(wave_vectors, material_mask)
 
-    # Apply the mask (if material_ID is not 2, the min distance squared will be set to zero):
-    masked_dist_sq = tf.where(material_mask, min_dist_sq, tf.zeros_like(min_dist_sq))
+    # Calculate squared z-distance to the focal plane: (z-z0)^2
+    z_dist_squared = tf.square(positions[:, 2] - focal_plane) # Shape: (N, SIZE)
 
-    # Compute loss factor by summing over the minimum distances squared (note that the optimal loss is zero):
-    loss = 10000*tf.reduce_sum(masked_dist_sq, axis=0)
+    # For each ray, find the STEP at which the distanced squared is a minimum:
+    min_indices = tf.math.argmin(z_dist_squared, axis=1)
+
+    # Extract the positions and trajectories corresponding to the STEPs at which the distance to the focal point:
+    closest_positions = tf.gather(positions, min_indices, axis=2, batch_dims=1)
+    closest_trajects = tf.gather(wave_vectors, min_indices, axis=2, batch_dims=1)
+
+    # Calculate the ray positions (x and y) corresponding to where the rays intersect the focal plane:
+    t = (focal_plane - closest_positions[:, 2])/closest_trajects[:, 2] # "Time" for which each ray intersects the z=constant plane.
+    xpos = closest_positions[:, 0] + t*closest_trajects[:, 0]
+    ypos = closest_positions[:, 1] + t*closest_trajects[:, 1]
+
+    # Calculate the variance for both the x positions and y positions:
+    var_x = tf.math.reduce_variance(xpos)
+    var_y = tf.math.reduce_variance(ypos)
+
+    loss = tf.math.sqrt(1000000.0*(var_x + var_y)) # Loss is the total standard deviation in mm
 
     return loss
