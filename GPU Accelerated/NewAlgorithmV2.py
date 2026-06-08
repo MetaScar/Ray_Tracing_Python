@@ -10,11 +10,11 @@ start_time = time.perf_counter()
 # THIS IS THE MOST UP-TO-DATE VERSION OF THE CODE.
 
 # Static Constants:
-Max_Rays = 1000 # Variable to keep track of the max number of rays allowed.
-SIZE = 1000 # Constant size of arrays to store ray positions, wave normals, and electric fields.
-distance_step = tf.constant(0.5) # Fixed distance step for propagating rays
-minimum_Poynting = tf.constant(0.1) # Any ray with a Poynting Vector magnitude less than this value will not be "launched" when creating new rays at an interface
-Num_constants = tf.constant(5, dtype=tf.int32) # Number of constants needed to parameterize the materials (permittivity + director profile)
+Max_Rays = 450 # Variable to keep track of the max number of rays allowed.
+SIZE = 200 # Constant size of arrays to store ray positions, wave normals, and electric fields.
+distance_step = tf.constant(0.05) # Fixed distance step for propagating rays
+minimum_Poynting = tf.constant(-1.0) # Any ray with a Poynting Vector magnitude less than this value will not be "launched" when creating new rays at an interface
+Num_constants = tf.constant(56, dtype=tf.int32) # Number of constants needed to parameterize the materials (permittivity + director profile)
 Num_Materials = tf.constant(1, dtype=tf.int32) # Size of the number of materials in the simulation (e.g. 2 ==> 3 materials)
 IGNORE_REFLECTIONS = True # True causes no reflected rays to spawn, False causes reflected rays to spawn as normal.
 
@@ -29,7 +29,6 @@ alive = tf.zeros([Max_Rays], dtype=tf.bool)
 PoyntingMag = tf.zeros([Max_Rays], dtype=tf.float32)
 ordinary = tf.zeros([Max_Rays], dtype=tf.bool)
 material_IDs = tf.zeros([Max_Rays], dtype=tf.int32)
-group_IDs = tf.zeros([Max_Rays], dtype=tf.int32) # An ID which tracks which rays originated from which sources. Used in certain loss function calculations.
 
 # Material parameter tensors (also standard tensors):
 ray_ordinary_consts = tf.zeros([Max_Rays, Num_constants], dtype=tf.float32)
@@ -38,43 +37,108 @@ ray_director_consts = tf.zeros([Max_Rays, Num_constants], dtype=tf.float32)
 
 # Loop counters (int32 tensors):
 step = tf.constant(1, dtype=tf.int32) # This should always be initialized to one
-Num_rays_active = tf.constant(40, dtype=tf.int32) # This should be intialized to the desired # of input starting rays
+Num_rays_active = tf.constant(100, dtype=tf.int32) # This should be intialized to the desired # of input starting rays
+Num_Starting_Rays = Num_rays_active
 
 # Initialize material tensors:
-geometry_vectors = tf.constant([[0.0, 5.0, -5.0, 5.0], [5.0, 10.0, -10.0, 10.0]])
+geometry_vectors = tf.constant([[0.0, 8.0, -2.5, 2.5], [8.0, 10.0, -5.0, 5.0]])
 isotropic = tf.constant([True, True], dtype=tf.bool)
 
-mat_ordinary_consts = tf.stack([[2.3656, 5.0, 0.1591, 0.0, 0.0], [-100.0, 5.0, 0.0, 0.0, 0.0]])
+# Find materialCoef FS coeffcients from initial polynomial guess:
+# materialCoefs_lens = tf.stack([nh.generateFourierCoefs(40, 16.0, [0.5, 10.0, 20.0]), nh.generateFourierCoefs(40, 5.0, [0.5, 5.0, 40.0])], axis=0) # (N, T0, [emax, rho1, alpha])
+# materialCoefs_lens = tf.reshape(materialCoefs_lens, [-1])
+
+# materialCoefs_air = tf.stack([nh.generateFourierCoefs(20, 8.0, [-100.0, 10.0, 0.0]), nh.generateFourierCoefs(20, 8.0, [-100.0, 10.0, 0.0])], axis=0)  # Results in a flat er = 1.
+# materialCoefs_air = tf.reshape(materialCoefs_air, [-1]) # Results in a flat er = 1.
+
+# Lens coefficients:
+erb = 1.5
+e_max = 5.8
+rho_max = 8.0 # lens radius
+alpha = 4.5
+C = 17.4
+zmin = -40.0
+zmax = 40.0
+T0 = 16.0
+
+# FS_coeffs = tf.constant([-2.9000, 10.577966442033571,	-2.644517763045427,	1.175360600576376,	-0.661155594074306,	0.423152134319206,	-0.293866304750302,	0.215911027620145,	-0.165315054935490,	0.130626623097328,	-0.105814192325012,	0.087455800136030,	-0.073492737778857,	0.062626192441672,	-0.054003921860388,	0.047047914437841,	-0.041354932571561,	0.036636728995691,	-0.032682829012930,	0.029336644123710,	-0.026479726239681,	0.024021139533335,	-0.021890133631576,	0.020030996147535,	-0.018399374001172,	0.016959603367423,	-0.015682744145981,	0.014545114240363,	-0.013527183500485,	0.012612729890533,	-0.011788189165964,	0.011042148957168,	-0.010364951742390,	0.009748380726371,	-0.009185409413939,	0.008670000534393,	-0.008196943506961,	0.007761722230117,	-0.007360406897294,	0.006989564975535,	-0.006646187563613,	0.006327628166478,	-0.006031551549847,	0.005755890821855,	-0.005498811263561,	0.005258679721952,	-0.005034038608945,	0.004823583730891,	-0.004626145316923,	0.004440671729517,	-0.004266215432190])
+
+# materialCoefs_lens = tf.concat([[erb, C, zmin, zmax, T0], FS_coeffs], axis=0)
+
+materialCoefs_lens = tf.constant([1.7000000e+00,  1.7400000e+01, -4.0000000e+01,  4.0000000e+01,
+        1.6000000e+01, -2.8304734e+00,  1.0496612e+01, -2.7222948e+00,
+        1.0993505e+00, -7.3412341e-01,  3.7208858e-01, -2.7466777e-01,
+        2.5886971e-01, -1.2727737e-01,  1.4478713e-01, -1.5068257e-01,
+        5.5423234e-02, -8.0074303e-02,  8.6546898e-02, -1.9548669e-02,
+        5.4926880e-02, -6.6027276e-02,  7.1996865e-03, -3.4953032e-02,
+        5.1373281e-02, -9.2328498e-03,  2.9523453e-02, -4.0450893e-02,
+        6.9585219e-03, -2.0507148e-02,  2.5666401e-02, -4.2328723e-03,
+        2.0767948e-02, -2.0752003e-02,  3.8161612e-04, -1.6458375e-02,
+        1.5035616e-02,  2.0771390e-03,  1.5684143e-02, -1.6479021e-02,
+        2.5884548e-05, -1.2941909e-02,  1.1724184e-02,  1.5739516e-03,
+        1.2016340e-02, -1.0893514e-02, -2.2598682e-03, -1.2370811e-02,
+        1.4079228e-02,  1.9118408e-03,  7.6199574e-03, -1.2536882e-02,
+       -4.7228960e-03,  2.2023106e-03,  1.1981796e-02, -7.9207700e-03])
+
+
+materialCoefs_air = tf.concat([[1.0, C, zmin, zmax, T0, -1000.0], tf.zeros(50, dtype=tf.float32)], axis=0)
+
+# materialCoefs_lens = [erb, e_max, rho_max, alpha, C, zmin, zmax]
+# materialCoefs_air = [1.0, -1000.0, 8.0, 0.0, C, zmin, zmax]
+
+mat_ordinary_consts = tf.stack([materialCoefs_lens, materialCoefs_air])
 mat_extraordinary_consts = tf.stack([[3.5, 0.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0, 0.0]])
 mat_director_consts = tf.stack([[0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0]])
 
 # Initialize Bounding Box:
-boundingBox = tf.constant([0.0, 10.0, -10.0, 10.0])
+boundingBox = tf.constant([0.0, 10.0, -5.0, 5.0])
+
+# Find circular feed locations:
+center_location = tf.constant([0.0000001, 0.0000001, -3.5])
+dx = 0.5
+dy = 0.5
+Nx = 1
+Ny = 1
+initialPoints = nh.getRectFeedPoints(center_location, dx, dy, Nx, Ny)
+numFeeds = tf.shape(initialPoints)[0]
+
+# Specify desired target beam trajectories for each feed (### CURRENTLY NOT USING THIS FEATURE)
+# targetTrajects = nh.getTargetTrajects(center_location, dr, dphi, Nrings, theta_spacing_deg=15)
+
+# Specify other variables that describe initial rays:
+theta_max_deg = 35.0
+theta_target_deg = 0.0
+Epol = tf.constant([0.0, 1.0, 0.0])
+
+# Vectorized versions of these variables:
+theta_max_deg = tf.tile([theta_max_deg], [numFeeds])
+theta_target_deg = tf.tile([theta_target_deg], [numFeeds])
+Epol = tf.expand_dims(Epol, axis=0)
+Epol = tf.tile(Epol, [numFeeds, 1])
+Num_Rays = tf.tile([Num_Starting_Rays/numFeeds], [numFeeds])
+group_IDs_initial = 1 + tf.range(numFeeds)
+group_IDs_initial = tf.repeat(group_IDs_initial, repeats=tf.cast(Num_Starting_Rays/numFeeds, tf.int32)) # Repeats are the number of rays per feed
+parent_IDs_initial = 1 + tf.range(Num_Starting_Rays) # This just assigns a unique ID to each ray, which is used for tracking rays through the system and visualizing ray trees.
 
 # Create initial rays to launch into system (isotropic point source):
-theta_max_degs = [5.0, 5.0, 5.0, 5.0]
-theta_target_degs = [0.0, 0.0, 0.0, 0.0]
-sphere_centers = [[0.001, 0.001, -6.0], [-0.625, 0.001, -6.0], [-1.25, 0.001, -6.0], [-1.875, 0.001, -6.0]]
-Epol = [[.57735, .57735, .57735], [.57735, .57735, .57735], [.57735, .57735, .57735], [.57735, .57735, .57735]]
-Num_Rays = [10, 10, 10, 10]
+# Call createIsotropicRays():
+positions_initial, wave_vectors_initial, PoyntingMag_initial, alive_initial, Efields_initial, ordinary_initial, material_IDs_initial, ray_ordinary_consts_initial, ray_extraordinary_consts_initial, ray_director_consts_initial = nh.createIsotropicRays(Num_Rays, theta_max_deg, theta_target_deg, initialPoints, Epol, mat_ordinary_consts, mat_extraordinary_consts, mat_director_consts)
 
-# Call createIsotropicRays() four times, then concatenate results:
-positions_initial1, wave_vectors_initial1, PoyntingMag_initial1, alive_initial1, Efields_initial1, ordinary_initial1, material_IDs_initial1, ray_ordinary_consts_initial1, ray_extraordinary_consts_initial1, ray_director_consts_initial1, group_IDs_initial1 = nh.createIsotropicRays(Num_Rays[0], theta_max_degs[0], theta_target_degs[0], sphere_centers[0], Epol[0], mat_ordinary_consts, mat_extraordinary_consts, mat_director_consts, group_ID=1)
-positions_initial2, wave_vectors_initial2, PoyntingMag_initial2, alive_initial2, Efields_initial2, ordinary_initial2, material_IDs_initial2, ray_ordinary_consts_initial2, ray_extraordinary_consts_initial2, ray_director_consts_initial2, group_IDs_initial2 = nh.createIsotropicRays(Num_Rays[1], theta_max_degs[1], theta_target_degs[1], sphere_centers[1], Epol[1], mat_ordinary_consts, mat_extraordinary_consts, mat_director_consts, group_ID=2)
-positions_initial3, wave_vectors_initial3, PoyntingMag_initial3, alive_initial3, Efields_initial3, ordinary_initial3, material_IDs_initial3, ray_ordinary_consts_initial3, ray_extraordinary_consts_initial3, ray_director_consts_initial3, group_IDs_initial3 = nh.createIsotropicRays(Num_Rays[2], theta_max_degs[2], theta_target_degs[2], sphere_centers[2], Epol[2], mat_ordinary_consts, mat_extraordinary_consts, mat_director_consts, group_ID=3)
-positions_initial4, wave_vectors_initial4, PoyntingMag_initial4, alive_initial4, Efields_initial4, ordinary_initial4, material_IDs_initial4, ray_ordinary_consts_initial4, ray_extraordinary_consts_initial4, ray_director_consts_initial4, group_IDs_initial4 = nh.createIsotropicRays(Num_Rays[3], theta_max_degs[3], theta_target_degs[3], sphere_centers[3], Epol[3], mat_ordinary_consts, mat_extraordinary_consts, mat_director_consts, group_ID=4)
+# positions_initial2, wave_vectors_initial2, PoyntingMag_initial2, alive_initial2, Efields_initial2, ordinary_initial2, material_IDs_initial2, ray_ordinary_consts_initial2, ray_extraordinary_consts_initial2, ray_director_consts_initial2, group_IDs_initial2 = nh.createIsotropicRays(Num_Rays[1], theta_max_degs[1], theta_target_degs[1], sphere_centers[1], Epol[1], mat_ordinary_consts, mat_extraordinary_consts, mat_director_consts, group_ID=2)
+# positions_initial3, wave_vectors_initial3, PoyntingMag_initial3, alive_initial3, Efields_initial3, ordinary_initial3, material_IDs_initial3, ray_ordinary_consts_initial3, ray_extraordinary_consts_initial3, ray_director_consts_initial3, group_IDs_initial3 = nh.createIsotropicRays(Num_Rays[2], theta_max_degs[2], theta_target_degs[2], sphere_centers[2], Epol[2], mat_ordinary_consts, mat_extraordinary_consts, mat_director_consts, group_ID=3)
+# positions_initial4, wave_vectors_initial4, PoyntingMag_initial4, alive_initial4, Efields_initial4, ordinary_initial4, material_IDs_initial4, ray_ordinary_consts_initial4, ray_extraordinary_consts_initial4, ray_director_consts_initial4, group_IDs_initial4 = nh.createIsotropicRays(Num_Rays[3], theta_max_degs[3], theta_target_degs[3], sphere_centers[3], Epol[3], mat_ordinary_consts, mat_extraordinary_consts, mat_director_consts, group_ID=4)
 
-positions_initial = tf.concat([positions_initial1, positions_initial2, positions_initial3, positions_initial4], axis=0)
-wave_vectors_initial = tf.concat([wave_vectors_initial1, wave_vectors_initial2, wave_vectors_initial3, wave_vectors_initial4], axis=0)
-PoyntingMag_initial = tf.concat([PoyntingMag_initial1, PoyntingMag_initial2, PoyntingMag_initial3, PoyntingMag_initial4], axis=0)
-alive_initial = tf.concat([alive_initial1, alive_initial2, alive_initial3, alive_initial4], axis=0)
-Efields_initial = tf.concat([Efields_initial1, Efields_initial2, Efields_initial3, Efields_initial4], axis=0)
-ordinary_initial = tf.concat([ordinary_initial1, ordinary_initial2, ordinary_initial3, ordinary_initial4], axis=0)
-material_IDs_initial = tf.concat([material_IDs_initial1, material_IDs_initial2, material_IDs_initial3, material_IDs_initial4], axis=0)
-ray_ordinary_consts_initial = tf.concat([ray_ordinary_consts_initial1, ray_ordinary_consts_initial2, ray_ordinary_consts_initial3, ray_ordinary_consts_initial4], axis=0)
-ray_extraordinary_consts_initial = tf.concat([ray_extraordinary_consts_initial1, ray_extraordinary_consts_initial2, ray_extraordinary_consts_initial3, ray_extraordinary_consts_initial4], axis=0)
-ray_director_consts_initial = tf.concat([ray_director_consts_initial1, ray_director_consts_initial2, ray_director_consts_initial3, ray_director_consts_initial4], axis=0)
-group_IDs_initial = tf.concat([group_IDs_initial1, group_IDs_initial2, group_IDs_initial3, group_IDs_initial4], axis=0)
+# positions_initial = tf.concat([positions_initial1, positions_initial2, positions_initial3, positions_initial4], axis=0)
+# wave_vectors_initial = tf.concat([wave_vectors_initial1, wave_vectors_initial2, wave_vectors_initial3, wave_vectors_initial4], axis=0)
+# PoyntingMag_initial = tf.concat([PoyntingMag_initial1, PoyntingMag_initial2, PoyntingMag_initial3, PoyntingMag_initial4], axis=0)
+# alive_initial = tf.concat([alive_initial1, alive_initial2, alive_initial3, alive_initial4], axis=0)
+# Efields_initial = tf.concat([Efields_initial1, Efields_initial2, Efields_initial3, Efields_initial4], axis=0)
+# ordinary_initial = tf.concat([ordinary_initial1, ordinary_initial2, ordinary_initial3, ordinary_initial4], axis=0)
+# material_IDs_initial = tf.concat([material_IDs_initial1, material_IDs_initial2, material_IDs_initial3, material_IDs_initial4], axis=0)
+# ray_ordinary_consts_initial = tf.concat([ray_ordinary_consts_initial1, ray_ordinary_consts_initial2, ray_ordinary_consts_initial3, ray_ordinary_consts_initial4], axis=0)
+# ray_extraordinary_consts_initial = tf.concat([ray_extraordinary_consts_initial1, ray_extraordinary_consts_initial2, ray_extraordinary_consts_initial3, ray_extraordinary_consts_initial4], axis=0)
+# ray_director_consts_initial = tf.concat([ray_director_consts_initial1, ray_director_consts_initial2, ray_director_consts_initial3, ray_director_consts_initial4], axis=0)
+# group_IDs_initial = tf.concat([group_IDs_initial1, group_IDs_initial2, group_IDs_initial3, group_IDs_initial4], axis=0)
 
 # Create initial rays to launch into system (plane wave):
 # angle = tf.constant(0.0)
@@ -99,6 +163,7 @@ ray_ordinary_consts = tf.pad(ray_ordinary_consts_initial, paddings)
 ray_extraordinary_consts = tf.pad(ray_extraordinary_consts_initial, paddings)
 ray_director_consts = tf.pad(ray_director_consts_initial, paddings)
 group_IDs = tf.pad(group_IDs_initial, paddings_1d)
+parent_IDs = tf.pad(parent_IDs_initial, paddings_1d)
 
 # Initialize the TensorArrays using TensorArray.write():
 positions_ta = positions_ta.write(0, tf.pad(positions_initial, paddings))
@@ -107,6 +172,10 @@ Efields_ta = Efields_ta.write(0, tf.pad(Efields_initial, paddings))
 
 # Main ray-tracing logic:
 while tf.reduce_any(alive): # While there is at least one True in the "alive" tensor
+
+    # Preserve the previous alive mask so rays that died on this step can keep their last position,
+    # while rays that were already dead remain zeroed out in future history steps.
+    alive_before = alive
 
     # 1) Perform a step of ray propagation:
 
@@ -117,6 +186,13 @@ while tf.reduce_any(alive): # While there is at least one True in the "alive" te
 
     # Call the rayPropagationStep function:
     new_wave_vectors, new_positions, new_Efields = nh.rayPropagation(curr_pos, curr_wave, curr_E, ordinary, alive, ray_ordinary_consts, ray_extraordinary_consts, ray_director_consts, isotropic, material_IDs, distance_step)
+
+    # Zero out any rays that were already dead before this step, so their later history does not persist.
+    already_dead = tf.logical_not(alive_before)
+    already_dead_expanded = tf.expand_dims(already_dead, axis=1)
+    new_positions = tf.where(already_dead_expanded, tf.zeros_like(new_positions), new_positions)
+    new_wave_vectors = tf.where(already_dead_expanded, tf.zeros_like(new_wave_vectors), new_wave_vectors)
+    new_Efields = tf.where(already_dead_expanded, tf.zeros_like(new_Efields), new_Efields)
     
     # Update the TensorArrays for positions, wave vectors, and Electric fields:
     positions_ta = positions_ta.write(step, new_positions)
@@ -145,6 +221,7 @@ while tf.reduce_any(alive): # While there is at least one True in the "alive" te
     ordinary_newMat = tf.boolean_mask(ordinary, newMatMask)
     material_IDs_newMat = tf.boolean_mask(material_IDs, newMatMask)
     group_IDs_newMat = tf.boolean_mask(group_IDs, newMatMask)
+    parent_IDs_newMat = tf.boolean_mask(parent_IDs, newMatMask)
     ray_ordinary_consts_newMat = tf.boolean_mask(ray_ordinary_consts, newMatMask)
     ray_extraordinary_consts_newMat = tf.boolean_mask(ray_ordinary_consts, newMatMask)
     ray_director_consts_newMat = tf.boolean_mask(ray_director_consts, newMatMask)
@@ -171,6 +248,7 @@ while tf.reduce_any(alive): # While there is at least one True in the "alive" te
     ray_extraordinary_consts_Iso_Iso = tf.boolean_mask(ray_extraordinary_consts_newMat, Iso_Iso_mask)
     ray_director_consts_Iso_Iso = tf.boolean_mask(ray_director_consts_newMat, Iso_Iso_mask)
     group_IDs_Iso_Iso = tf.boolean_mask(group_IDs_newMat, Iso_Iso_mask)
+    parent_IDs_Iso_Iso = tf.boolean_mask(parent_IDs_newMat, Iso_Iso_mask)
     prev_Mat_types_Iso_Iso = tf.boolean_mask(prev_Mat_types, Iso_Iso_mask)
     new_Mat_types_Iso_Iso = tf.boolean_mask(new_Mat_types, Iso_Iso_mask)
     prev_MatIDs_Iso_Iso = tf.boolean_mask(material_IDs_newMat, Iso_Iso_mask)
@@ -196,6 +274,8 @@ while tf.reduce_any(alive): # While there is at least one True in the "alive" te
     new_materialIDs_transmittedII = new_MatIDs_Iso_Iso
     group_IDs_reflectedII = group_IDs_Iso_Iso
     group_IDs_transmittedII = group_IDs_Iso_Iso
+    parent_IDs_reflectedII = parent_IDs_Iso_Iso
+    parent_IDs_transmittedII = parent_IDs_Iso_Iso
     ray_ordinary_consts_reflectedII = tf.gather(mat_ordinary_consts, new_materialIDs_reflectedII)
     ray_ordinary_consts_transmittedII = tf.gather(mat_ordinary_consts, new_materialIDs_transmittedII)
     ray_extraordinary_consts_reflectedII = tf.gather(mat_extraordinary_consts, new_materialIDs_reflectedII)
@@ -215,6 +295,7 @@ while tf.reduce_any(alive): # While there is at least one True in the "alive" te
     ray_extraordinary_consts_Iso_Aniso = tf.boolean_mask(ray_extraordinary_consts_newMat, Iso_Aniso_mask)
     ray_director_consts_Iso_Aniso = tf.boolean_mask(ray_director_consts_newMat, Iso_Aniso_mask)
     group_IDs_Iso_Aniso = tf.boolean_mask(group_IDs_newMat, Iso_Aniso_mask)
+    parent_IDs_Iso_Aniso = tf.boolean_mask(parent_IDs_newMat, Iso_Aniso_mask)
     prev_Mat_types_Iso_Aniso = tf.boolean_mask(prev_Mat_types, Iso_Aniso_mask)
     new_Mat_types_Iso_Aniso = tf.boolean_mask(new_Mat_types, Iso_Aniso_mask)
     prev_MatIDs_Iso_Aniso = tf.boolean_mask(material_IDs_newMat, Iso_Aniso_mask)
@@ -250,6 +331,10 @@ while tf.reduce_any(alive): # While there is at least one True in the "alive" te
     group_IDs_transmitted_ordinaryIA = group_IDs_Iso_Aniso
     group_IDs_transmitted_extraordinaryIA = group_IDs_Iso_Aniso
 
+    parent_IDs_reflectedIA = parent_IDs_Iso_Aniso
+    parent_IDs_transmitted_ordinaryIA = parent_IDs_Iso_Aniso
+    parent_IDs_transmitted_extraordinaryIA = parent_IDs_Iso_Aniso
+
     ray_ordinary_consts_reflectedIA = tf.gather(mat_ordinary_consts, new_materialIDs_reflectedIA)
     ray_ordinary_consts_transmitted_ordinaryIA = tf.gather(mat_ordinary_consts, new_materialIDs_transmitted_ordinaryIA)
     ray_ordinary_consts_transmitted_extraordinaryIA = tf.gather(mat_ordinary_consts, new_materialIDs_transmitted_extraordinaryIA)
@@ -276,6 +361,7 @@ while tf.reduce_any(alive): # While there is at least one True in the "alive" te
     ray_extraordinary_consts_Aniso_Iso = tf.boolean_mask(ray_extraordinary_consts_newMat, Aniso_Iso_mask)
     ray_director_consts_Aniso_Iso = tf.boolean_mask(ray_director_consts_newMat, Aniso_Iso_mask)
     group_IDs_Aniso_Iso = tf.boolean_mask(group_IDs_newMat, Aniso_Iso_mask)
+    parent_IDs_Aniso_Iso = tf.boolean_mask(parent_IDs_newMat, Aniso_Iso_mask)
     prev_Mat_types_Aniso_Iso = tf.boolean_mask(prev_Mat_types, Aniso_Iso_mask)
     new_Mat_types_Aniso_Iso = tf.boolean_mask(new_Mat_types, Aniso_Iso_mask)
     prev_MatIDs_Aniso_Iso = tf.boolean_mask(material_IDs_newMat, Aniso_Iso_mask)
@@ -309,6 +395,10 @@ while tf.reduce_any(alive): # While there is at least one True in the "alive" te
     group_IDs_reflected_ordinaryAI = group_IDs_Aniso_Iso
     group_IDs_reflected_extraordinaryAI = group_IDs_Aniso_Iso
     group_IDs_transmittedAI = group_IDs_Aniso_Iso
+
+    parent_IDs_reflected_ordinaryAI = parent_IDs_Aniso_Iso
+    parent_IDs_reflected_extraordinaryAI = parent_IDs_Aniso_Iso
+    parent_IDs_transmittedAI = parent_IDs_Aniso_Iso
     
     ray_ordinary_consts_reflected_ordinaryAI = tf.gather(mat_ordinary_consts, new_materialIDs_reflected_ordinaryAI)
     ray_ordinary_consts_reflected_extraordinaryAI = tf.gather(mat_ordinary_consts, new_materialIDs_reflected_extraordinaryAI)
@@ -321,7 +411,7 @@ while tf.reduce_any(alive): # While there is at least one True in the "alive" te
     ray_director_consts_reflected_ordinaryAI = tf.gather(mat_director_consts, new_materialIDs_reflected_ordinaryAI)
     ray_director_consts_reflected_extraordinaryAI = tf.gather(mat_director_consts, new_materialIDs_reflected_extraordinaryAI)
     ray_director_consts_transmittedAI = tf.gather(mat_director_consts, new_materialIDs_transmittedAI)
- 
+
     ordinary_reflected_ordinaryAI = tf.ones(tf.shape(new_positions_reflected_ordinaryAI)[0], dtype=tf.bool)
     ordinary_reflected_extraordinaryAI = tf.zeros(tf.shape(new_positions_reflected_extraordinaryAI)[0], dtype=tf.bool)
     ordinary_transmittedAI = tf.ones(tf.shape(new_positions_transmittedAI)[0], dtype=tf.bool)
@@ -336,6 +426,7 @@ while tf.reduce_any(alive): # While there is at least one True in the "alive" te
     ray_extraordinary_consts_Aniso_Aniso = tf.boolean_mask(ray_extraordinary_consts_newMat, Aniso_Aniso_mask)
     ray_director_consts_Aniso_Aniso = tf.boolean_mask(ray_director_consts_newMat, Aniso_Aniso_mask)
     group_IDs_Aniso_Aniso = tf.boolean_mask(group_IDs_newMat, Aniso_Aniso_mask)
+    parent_IDs_Aniso_Aniso = tf.boolean_mask(parent_IDs_newMat, Aniso_Aniso_mask)
     prev_Mat_types_Aniso_Aniso = tf.boolean_mask(prev_Mat_types, Aniso_Aniso_mask)
     new_Mat_types_Aniso_Aniso = tf.boolean_mask(new_Mat_types, Aniso_Aniso_mask)
     prev_MatIDs_Aniso_Aniso = tf.boolean_mask(material_IDs_newMat, Aniso_Aniso_mask)
@@ -373,6 +464,11 @@ while tf.reduce_any(alive): # While there is at least one True in the "alive" te
     group_IDs_reflected_extraordinaryAA = group_IDs_Aniso_Aniso
     group_IDs_transmitted_ordinaryAA = group_IDs_Aniso_Aniso
     group_IDs_transmitted_extraordinaryAA = group_IDs_Aniso_Aniso
+
+    parent_IDs_reflected_ordinaryAA = parent_IDs_Aniso_Aniso
+    parent_IDs_reflected_extraordinaryAA = parent_IDs_Aniso_Aniso
+    parent_IDs_transmitted_ordinaryAA = parent_IDs_Aniso_Aniso
+    parent_IDs_transmitted_extraordinaryAA = parent_IDs_Aniso_Aniso
     
     new_materialIDs_reflected_ordinaryAA = prev_MatIDs_Aniso_Aniso
     new_materialIDs_reflected_extraordinaryAA = prev_MatIDs_Aniso_Aniso
@@ -393,7 +489,7 @@ while tf.reduce_any(alive): # While there is at least one True in the "alive" te
     ray_director_consts_reflected_extraordinaryAA = tf.gather(mat_director_consts, new_materialIDs_reflected_extraordinaryAA)
     ray_director_consts_transmitted_ordinaryAA = tf.gather(mat_director_consts, new_materialIDs_transmitted_ordinaryAA)
     ray_director_consts_transmitted_extraordinaryAA = tf.gather(mat_director_consts, new_materialIDs_transmitted_extraordinaryAA)
- 
+
     ordinary_reflected_ordinaryAA = tf.ones(tf.shape(new_positions_reflected_ordinaryAA)[0], dtype=tf.bool)
     ordinary_reflected_extraordinaryAA = tf.zeros(tf.shape(new_positions_reflected_extraordinaryAA)[0], dtype=tf.bool)
     ordinary_transmitted_ordinaryAA = tf.ones(tf.shape(new_positions_transmitted_ordinaryAA)[0], dtype=tf.bool)
@@ -439,6 +535,13 @@ while tf.reduce_any(alive): # While there is at least one True in the "alive" te
         group_IDs_reflected_ordinaryAA = tf.zeros_like(group_IDs_reflected_ordinaryAA)[:0]
         group_IDs_reflected_extraordinaryAA = tf.zeros_like(group_IDs_reflected_extraordinaryAA)[:0]
 
+        parent_IDs_reflectedII = tf.zeros_like(parent_IDs_reflectedII)[:0]
+        parent_IDs_reflectedIA = tf.zeros_like(parent_IDs_reflectedIA)[:0]
+        parent_IDs_reflected_ordinaryAI = tf.zeros_like(parent_IDs_reflected_ordinaryAI)[:0]
+        parent_IDs_reflected_extraordinaryAI = tf.zeros_like(parent_IDs_reflected_extraordinaryAI)[:0]
+        parent_IDs_reflected_ordinaryAA = tf.zeros_like(parent_IDs_reflected_ordinaryAA)[:0]
+        parent_IDs_reflected_extraordinaryAA = tf.zeros_like(parent_IDs_reflected_extraordinaryAA)[:0]
+
         new_materialIDs_reflectedII = tf.zeros_like(new_materialIDs_reflectedII)[:0]
         new_materialIDs_reflectedIA = tf.zeros_like(new_materialIDs_reflectedIA)[:0]
         new_materialIDs_reflected_ordinaryAI = tf.zeros_like(new_materialIDs_reflected_ordinaryAI)[:0]
@@ -471,6 +574,7 @@ while tf.reduce_any(alive): # While there is at least one True in the "alive" te
     Efields_combined = tf.concat([E_rII, E_tII, E_rIA, E_toIA, E_teIA, E_roAI, E_reAI, E_tAI, E_roAA, E_reAA, E_toAA, E_teAA], axis=0)
     ordinary_combined = tf.concat([ordinary_reflectedII, ordinary_transmittedII, ordinary_reflectedIA, ordinary_transmitted_ordinaryIA, ordinary_transmitted_extraordinaryIA, ordinary_reflected_ordinaryAI, ordinary_reflected_extraordinaryAI, ordinary_transmittedAI, ordinary_reflected_ordinaryAA, ordinary_reflected_extraordinaryAA, ordinary_transmitted_ordinaryAA, ordinary_transmitted_extraordinaryAA], axis=0)
     group_IDs_combined = tf.concat([group_IDs_reflectedII, group_IDs_transmittedII, group_IDs_reflectedIA, group_IDs_transmitted_ordinaryIA, group_IDs_transmitted_extraordinaryIA, group_IDs_reflected_ordinaryAI, group_IDs_reflected_extraordinaryAI, group_IDs_transmittedAI, group_IDs_reflected_ordinaryAA, group_IDs_reflected_extraordinaryAA, group_IDs_transmitted_ordinaryAA, group_IDs_transmitted_extraordinaryAA], axis=0)
+    parent_IDs_combined = tf.concat([parent_IDs_reflectedII, parent_IDs_transmittedII, parent_IDs_reflectedIA, parent_IDs_transmitted_ordinaryIA, parent_IDs_transmitted_extraordinaryIA, parent_IDs_reflected_ordinaryAI, parent_IDs_reflected_extraordinaryAI, parent_IDs_transmittedAI, parent_IDs_reflected_ordinaryAA, parent_IDs_reflected_extraordinaryAA, parent_IDs_transmitted_ordinaryAA, parent_IDs_transmitted_extraordinaryAA], axis=0)
     material_IDs_combined = tf.concat([new_materialIDs_reflectedII, new_materialIDs_transmittedII, new_materialIDs_reflectedIA, new_materialIDs_transmitted_ordinaryIA, new_materialIDs_transmitted_extraordinaryIA, new_materialIDs_reflected_ordinaryAI, new_materialIDs_reflected_extraordinaryAI, new_materialIDs_transmittedAI, new_materialIDs_reflected_ordinaryAA, new_materialIDs_reflected_extraordinaryAA, new_materialIDs_transmitted_ordinaryAA, new_materialIDs_transmitted_extraordinaryAA], axis=0)
     ray_ordinary_consts_combined = tf.concat([ray_ordinary_consts_reflectedII, ray_ordinary_consts_transmittedII, ray_ordinary_consts_reflectedIA, ray_ordinary_consts_transmitted_ordinaryIA, ray_ordinary_consts_transmitted_extraordinaryIA, ray_ordinary_consts_reflected_ordinaryAI, ray_ordinary_consts_reflected_extraordinaryAI, ray_ordinary_consts_transmittedAI, ray_ordinary_consts_reflected_ordinaryAA, ray_ordinary_consts_reflected_extraordinaryAA, ray_ordinary_consts_transmitted_ordinaryAA, ray_ordinary_consts_transmitted_extraordinaryAA], axis=0)
     ray_extraordinary_consts_combined = tf.concat([ray_extraordinary_consts_reflectedII, ray_extraordinary_consts_transmittedII, ray_extraordinary_consts_reflectedIA, ray_extraordinary_consts_transmitted_ordinaryIA, ray_extraordinary_consts_transmitted_extraordinaryIA, ray_extraordinary_consts_reflected_ordinaryAI, ray_extraordinary_consts_reflected_extraordinaryAI, ray_extraordinary_consts_transmittedAI, ray_extraordinary_consts_reflected_ordinaryAA, ray_extraordinary_consts_reflected_extraordinaryAA, ray_extraordinary_consts_transmitted_ordinaryAA, ray_extraordinary_consts_transmitted_extraordinaryAA], axis=0)
@@ -489,6 +593,7 @@ while tf.reduce_any(alive): # While there is at least one True in the "alive" te
     Efields_combined = tf.boolean_mask(Efields_combined, small_magnitude_mask)
     ordinary_combined = tf.boolean_mask(ordinary_combined, small_magnitude_mask)
     group_IDs_combined = tf.boolean_mask(group_IDs_combined, small_magnitude_mask)
+    parent_IDs_combined = tf.boolean_mask(parent_IDs_combined, small_magnitude_mask)
     material_IDs_combined = tf.boolean_mask(material_IDs_combined, small_magnitude_mask)
     ray_ordinary_consts_combined = tf.boolean_mask(ray_ordinary_consts_combined, small_magnitude_mask)
     ray_extraordinary_consts_combined = tf.boolean_mask(ray_extraordinary_consts_combined, small_magnitude_mask)
@@ -526,6 +631,7 @@ while tf.reduce_any(alive): # While there is at least one True in the "alive" te
     PoyntingMag = tf.tensor_scatter_nd_update(PoyntingMag, indices1, PoyntingMag_combined)
     ordinary = tf.tensor_scatter_nd_update(ordinary, indices1, ordinary_combined)
     group_IDs = tf.tensor_scatter_nd_update(group_IDs, indices1, group_IDs_combined)
+    parent_IDs = tf.tensor_scatter_nd_update(parent_IDs, indices1, parent_IDs_combined)
     material_IDs = tf.tensor_scatter_nd_update(material_IDs, indices1, material_IDs_combined)
     ray_ordinary_consts = tf.tensor_scatter_nd_update(ray_ordinary_consts, indicesCoefs, ray_ordinary_consts_combined)
     ray_extraordinary_consts = tf.tensor_scatter_nd_update(ray_extraordinary_consts, indicesCoefs, ray_extraordinary_consts_combined)
@@ -540,8 +646,35 @@ positions_final = tf.transpose(positions_ta.stack(), perm=[1, 2, 0])
 wave_vectors_final = tf.transpose(wave_vectors_ta.stack(), perm=[1, 2, 0])
 Efields_final = tf.transpose(Efields_ta.stack(), perm=[1, 2, 0])
 
+# Compute constructCompleteTensors() function:
+unique_parent_IDs, group_IDs_by_parent, positions_by_parent, wave_vectors_by_parent, Efields_by_parent, PoyntingMags_by_parent = nh.constructCompleteTensors(positions_final, wave_vectors_final, Efields_final, PoyntingMag, group_IDs, parent_IDs)
+
+# Interpolate the phase, position, E-field, and wave vector of each ray at regular intervals along its path:
+phases_interp, positions_interp, Efields_interp, wave_vectors_interp = nh.computePhase(positions_by_parent, wave_vectors_by_parent, Efields_by_parent, wavelength=1.5, interpolation_step=10)
+
+# Compute the phase, position, E-field, and wave vector at a specified z=constant plane:
+intersected, xy_positions, phases_at_plane, Efields_at_plane, wave_vectors_at_plane = nh.computeAtPlane(phases_interp, positions_interp, Efields_interp, wave_vectors_interp, z_target=3.0)
+# (Manually) compute the Poynting Magnitudes at the plane by knowing which material the plane is in:
+dense_poynting = PoyntingMags_by_parent.to_tensor(default_value=0.0)
+S_mags_at_plane = dense_poynting[:, 2] # Since the plane is past the lens (third ray per parent)
+
+# Compute fx and fy (this is a test):
+U_normalized = nh.computeFarField(xy_positions, phases_at_plane, Efields_at_plane, S_mags_at_plane, wave_vectors_at_plane, wavelength=1.5)
+
+# Plot the normalized far field pattern (phi=0 cut):
+U_phi0 = U_normalized[:, 0]
+U_phi_dB = 10.0*tf.math.log(U_phi0)/tf.math.log(10.0) # Convert to dB scale
+theta = tf.linspace(0.0, 180.0, tf.shape(U_phi0)[0])
+plt.plot(theta.numpy(), U_phi_dB.numpy())
+plt.xlabel("Theta (degrees)")
+plt.ylabel("Normalized Directivity (dBi)")
+plt.title("Far Field Radiation Pattern (Phi = 0)")
+plt.grid()
+plt.savefig("far_field_pattern.png", dpi=300)
+
 # Calculate and print focus loss value:
-loss = nh.planeWaveObjective(wave_vectors_final, group_IDs, material_IDs, Num_Starting_Rays=40)
+loss = nh.planeWaveObjective(wave_vectors_final, group_IDs, material_IDs, Num_Starting_Rays)
+# theta, phi = nh.calcBeamAngles(wave_vectors_final, group_IDs, material_IDs, Num_Starting_Rays, specificGroup=1)
 print(f"Value of Loss: {loss.numpy()}")
 
 # End timer:
@@ -555,6 +688,10 @@ print(f"Execution took {duration:.4f} seconds")
 print(f"Total Numbers of Steps: {step}")
 print(f"Total Number of Rays: {Num_rays_active}")
 
+# Calculate and plot the rays from a particular feed on the aperture:
+aperture_positions = nh.calcAperturePositions(positions_final, wave_vectors_final, material_IDs, focal_plane=2.5, group_IDs=group_IDs, groupID=1)
+nh.plotAperturePositions(aperture_positions)
+
 # Plotting results:
 
 fig = plt.figure()
@@ -563,9 +700,9 @@ ax = plt.axes(projection='3d')
 # Plotting semi-transparent cylinder to help visualize locaiton of lens:
 
 # Cylinder parameters
-radius = tf.constant(5.0, dtype=tf.float32)
-height = tf.constant(10.0, dtype=tf.float32)
-z_min = tf.constant(-5.0, dtype=tf.float32)
+radius = tf.constant(8.0, dtype=tf.float32)
+height = tf.constant(5.0, dtype=tf.float32)
+z_min = tf.constant(-2.5, dtype=tf.float32)
 
 n_theta = 100
 n_z = 100
@@ -637,22 +774,31 @@ ax.plot_surface(
     color='gray', alpha=0.2, edgecolor='none'
 )
 
-# Plotting the ray paths:
-for i in range(Num_rays_active):
-    # Extract the trajectory for the current ray [3, step-1]
-    path = positions_final[i, :, :step-1] 
-    
-    # Create a mask: True if any coordinate (x,y,z) at that step is non-zero
-    # We check across the coordinate axis (axis 0)
-    mask = tf.reduce_any(path != 0, axis=0).numpy()
-    
-    # Apply the mask to x, y, and z coordinates
-    z_coords = path[2, :][mask]
-    y_coords = path[1, :][mask]
-    x_coords = path[0, :][mask]
+# Plotting only a single (complete) ray:
+x_coords = positions_by_parent[0,:,0].numpy()
+y_coords = positions_by_parent[0,:,1].numpy()
+z_coords = positions_by_parent[0,:,2].numpy()
 
-    color = 'blue' if ordinary[i] else 'red'
-    ax.plot3D(x_coords, y_coords, z_coords, color=color)
+ax.plot3D(x_coords, y_coords, z_coords, color='blue', linewidth=2)
+
+# # Plotting the ray paths:
+# for i in range(Num_rays_active):
+#     # Extract the trajectory for the current ray [3, step-1]
+#     path = positions_final[i, :, :step-1]
+
+#     # Only plotting rays from a particular feed:
+#     if (group_IDs[i] == 1):
+#         # Create a mask: True if any coordinate (x,y,z) at that step is non-zero
+#         # We check across the coordinate axis (axis 0)
+#         mask = tf.reduce_any(path != 0, axis=0).numpy()
+        
+#         # Apply the mask to x, y, and z coordinates
+#         z_coords = path[2, :][mask]
+#         y_coords = path[1, :][mask]
+#         x_coords = path[0, :][mask]
+
+#         color = 'blue' if ordinary[i] else 'red'
+#         ax.scatter3D(x_coords, y_coords, z_coords, color=color, s=5)
 
 # # Plot a vertical line to indicate the start of the lens:
 # plt.axvline(x=0.05, color='k', linestyle='-', linewidth=2)
@@ -665,9 +811,9 @@ for i in range(Num_rays_active):
 
 plt.title("3D Ray Propagation")
 plt.grid(True)
-ax.set_xlim(-10, 10)
-ax.set_ylim(-10, 10)
-ax.set_zlim(-10, 10)
+ax.set_xlim(-8, 8)
+ax.set_ylim(-8, 8)
+ax.set_zlim(-5, 5)
 ax.set_box_aspect([1, 1, 1])
 
-plt.show()
+plt.savefig("3D_Ray_Propagation.png", dpi=300)
