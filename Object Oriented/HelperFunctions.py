@@ -10,7 +10,7 @@ def findRotationMatrix(o):
     phi2 = tf.atan2(tf.math.real(oxz[0, 0]), tf.math.real(oxz[2, 0])) # Angle of oxz, moving from the z-axis towards the x-axis
     Ay = tf.stack([[tf.cos(-phi2), 0, tf.sin(-phi2)], [0,1,0], [-tf.sin(-phi2), 0, tf.cos(phi2)]])
     Ay = tf.cast(Ay, dtype = tf.complex64)
-    Az = tf.cast(Az, tf.complex64)
+    Az = tf.cast(Az, dtype = tf.complex64)
     R_matrix = Ay@Az # The product of the two matrices is the overall 3x3 Rotation matrix
     return R_matrix
 
@@ -64,43 +64,41 @@ def findEPolVector(A, pe, o, no, ne):
     E_pol = tf.linalg.inv(A)@E_pol_p
     return E_pol
 
-# This function takes in the wave vector at an anisotropic boundary and calculates the associated incident Electric field vector.
-# THIS FUNCTION IS NO LONGER USED. The electric field is now tracked along with ray propagation.
+# This function takes in the wave vector and optical axis and calculates the associated Electric field (unit) vector.
+# Note that the associated phase of the electric field is updating during ray propagation (WavePropagation.py)
 def getEfield(no, ne, px, py, pz, o, ordinary):
     p = [px, py, pz]
     A1 = findRotationMatrix(tf.transpose(tf.squeeze(o)))
+    A1 = tf.cast(A1, dtype=tf.float32)
     p_p = A1@tf.stack([[p[0]], [p[1]], [p[2]]])
     o_p = A1@tf.stack([[o[0]], [o[1]], [o[2]]])
 
     if ordinary:
         E_p = tf.transpose(tf.linalg.cross(tf.transpose(p_p), tf.transpose(o_p)))/tf.norm(tf.linalg.cross(tf.transpose(p_p), tf.transpose(o_p)))
         E = tf.transpose(tf.linalg.inv(A1)@E_p)
-        return E
+        return tf.squeeze(E)
     else:
         grad_p_He = tf.stack([[2*p_p[0,0]/ne**2],[2*p_p[1,0]/ne**2],[2*p_p[2,0]/no**2]])
         E_p = tf.transpose(tf.linalg.cross(tf.linalg.cross(tf.transpose(p_p), tf.transpose(o_p)), tf.transpose(grad_p_He))/tf.norm(tf.linalg.cross(tf.linalg.cross(tf.transpose(p_p), tf.transpose(o_p)), tf.transpose(grad_p_He))))
         E = tf.transpose(tf.linalg.inv(A1)@E_p)
-        return E
+        return tf.squeeze(E)
 
 # This function contains the analytical functions for the director_profile and its derivatives.
 # The derivatives must be analytically calculated by hand.
 def  getDirector(x,y,z, c0, c1, c2):
 
-    # Intermediate variable:
-    theta = c0 + c1*tf.math.sqrt(x**2 + y**2 + z**2) + c2*(x**2 + y**2 + z**2)
-
-    dx = tf.math.cos(theta)**2
-    dy = tf.math.sin(theta)**2
+    dx = tf.math.cos(c0*(z-2.0))
+    dy = tf.math.sin(c0*(z-2.0))
     dz = tf.constant(0.0)
 
     director = tf.stack([dx, dy, dz])
     
-    ddx_x = (c1*x/tf.math.sqrt(x**2 + y**2 + z**2) + 2*c2*x)*-2*tf.math.cos(theta)*tf.math.sin(theta)
-    ddx_y = (c1*x/tf.math.sqrt(x**2 + y**2 + z**2) + 2*c2*x)**-2*tf.math.cos(theta)*tf.math.sin(theta)
-    ddx_z = (c1*z/tf.math.sqrt(x**2 + y**2 + z**2) + 2*c2*z)*-2*tf.math.cos(theta)*tf.math.sin(theta)
-    ddy_x = -1*ddx_x
-    ddy_y = -1*ddx_y
-    ddy_z = -1*ddx_z
+    ddx_x = tf.constant(0.0)
+    ddx_y = tf.constant(0.0)
+    ddx_z = -c0*tf.math.sin(c0*(z-2.0))
+    ddy_x = tf.constant(0.0)
+    ddy_y = tf.constant(0.0)
+    ddy_z = c0*tf.math.cos(c0*(z-2.0))
     ddz_x = tf.constant(0.0)
     ddz_y = tf.constant(0.0)
     ddz_z = tf.constant(0.0)
@@ -110,17 +108,17 @@ def  getDirector(x,y,z, c0, c1, c2):
 # These function contains the analytical functions for no and ne and their spatial derivatives.
 # The derivatives must be analytically calculated by hand.
 def getOrdinaryIndex(x,y,z, a0, a1, a2):
-    e_perp = a1 - a2*(x**2 + y**2 + z**2)/a0**2
-    deperp_dx = -2*x*a2/a0**2
-    deperp_dy = -2*y*a2/a0**2
-    deperp_dz = -2*z*a2/a0**2
+    e_perp = a0*(1 - a2**2*x**2)
+    deperp_dx = -2.0*a0*x*a2**2
+    deperp_dy = tf.constant(0.0)
+    deperp_dz = tf.constant(0.0)
     return e_perp, deperp_dx, deperp_dy, deperp_dz
 
 def getExtraordinaryIndex(x,y,z, b0, b1, b2):
-    e_para = b1 - b2*(x**2 + y**2 + z**2)/b0**2
-    depara_dx = -2*x*b2/b0**2
-    depara_dy = -2*y*b2/b0**2
-    depara_dz = -2*z*b2/b0**2
+    e_para = b0*(1-(b2**2)*x**2)
+    depara_dx = -2.0*b0*x*b2**2
+    depara_dy = tf.constant(0.0)
+    depara_dz = tf.constant(0.0)
     return e_para, depara_dx, depara_dy, depara_dz
 
 # This function takes in a list of materials and a specified 3D coordinate, then returns the material that corresponds to that coordinate.
@@ -142,7 +140,13 @@ def getMaterialAtCoordinate(materials, coordinate):
                 actual_material = element
                 break
         return actual_material
-
+    # This only work for two cylinders. The first cylinder must be at the origin.
+    if materials[0].type == "cylinder":
+        r = tf.math.sqrt(x**2 + y**2)
+        if(r>=materials[0].rmin) and (r<=materials[0].rmax) and (z>materials[0].hmin) and (z<materials[0].hmax):
+            return materials[0]
+        else:
+            return materials[1]
 
 # This function takes in a position (x,y,z) and returns True if the point is within the bouding box, False if outside the bounding box.
 # This code works for either rectangular slabs or concentric spheres (all materials must be the same type!)    
@@ -161,10 +165,15 @@ def checkBoundary(boundingBox, coordinate):
             return True
         else:
             return False
+    if boundingBox.type == "cylinder":
+        r = tf.math.sqrt(x**2 + y**2)
+        if (r<boundingBox.rmax) and (r>boundingBox.rmin) and (z<boundingBox.hmax) and (z>boundingBox.hmin):
+            return True
+        else:
+            return False
     
-
 # This function takes in a current Material and a previous material and calculates the surface normal unit vector.
-# This code works for either rectangular slabs or concentric spheres (all materials must be the same type!)    
+# This code works for rectangular slabs, concentric spheres, or "concentric" cylinders (all materials must be the same type!)    
 def getSurfaceNormal(currentMat, prevMat, coordinate):
     if currentMat.type == "rect":
         if currentMat.zmax >= prevMat.zmax:
@@ -176,6 +185,21 @@ def getSurfaceNormal(currentMat, prevMat, coordinate):
             return [coordinate[0].numpy(), coordinate[1].numpy(), coordinate[2].numpy()]/(-1.0*tf.norm(coordinate).numpy())
         else:
             return [coordinate[0].numpy(), coordinate[1].numpy(), coordinate[2].numpy()]/tf.norm(coordinate).numpy()
+    if currentMat.type == "cylinder":
+        if prevMat.rmax > currentMat.rmax:
+            min_zdistance = tf.minimum(abs(currentMat.hmax - coordinate[2]), abs(currentMat.hmin - coordinate[2]))
+            min_rdistance = currentMat.rmax - tf.math.sqrt(coordinate[0]**2 + coordinate[1]**2)
+            if min_zdistance < min_rdistance:
+                return [0.0, 0.0, -1.0*coordinate[2].numpy()]/tf.norm([0.0, 0.0, coordinate[2].numpy()])
+            else:
+                return [-1.0*coordinate[0].numpy(), -1.0*coordinate[1].numpy(), 0.0]/tf.norm([coordinate[0].numpy(), coordinate[1].numpy(), 0.0])
+        else:
+            min_zdistance = tf.minimum(abs(prevMat.hmax - coordinate[2]), abs(prevMat.hmin - coordinate[2]))
+            min_rdistance = abs(-1.0*prevMat.rmax + tf.math.sqrt(coordinate[0]**2 + coordinate[1]**2))
+            if min_zdistance < min_rdistance:
+                return [0.0, 0.0, coordinate[2].numpy()]/tf.norm([0.0, 0.0, coordinate[2].numpy()])
+            else:
+                return [coordinate[0].numpy(), coordinate[1].numpy(), 0.0]/tf.norm([coordinate[0].numpy(), coordinate[1].numpy(), 0.0])
 
 # This function calculates the cross product of two, in general complex, 1x3 vectors.
 def cross(a, b):
@@ -194,6 +218,59 @@ def validRay(S, p):
     if tf.abs(tf.math.imag(p[0])) >= tf.constant(1.0e-5, dtype=tf.float32) or tf.abs(tf.math.imag(p[1])) >= tf.constant(1.0e-5, dtype=tf.float32) or tf.abs(tf.math.imag(p[2])) >= tf.constant(1.0e-5, dtype=tf.float32):
         check = False
     return check
+
+# This function computes the far-field electric field vector of a Gaussian beam given a set of input parameters and a given theta and phi.
+# Note that the Gaussian beam must be linearly polarized.
+def computeFarField(theta, phi, S, Eo, sigma, Epol_vector, E_pol_phase, xo, yo, zo, k):
+
+    r = tf.constant(10000.0) # Arbitrarily large number to make sure we are in the far-field
+
+    # With this scheme xp is always magnitude 1, yp is always 0:
+    xp = tf.exp(tf.complex(0.0, -1.0*E_pol_phase))
+    yp = tf.complex(1.0, 0.0)
+
+    phi1 = tf.atan2(S[1], S[0])
+    phi2 = tf.atan2(tf.math.sqrt(S[0]**2 + S[1]**2), S[2])
+
+    # Rotate Epol vector find phi3:
+    Rmatrix = findRotationMatrix(S)
+    Rmatrix = tf.math.real(Rmatrix)
+    E_pol_rotated = Rmatrix@tf.stack([[Epol_vector[0]], [Epol_vector[1]], [Epol_vector[2]]])
+    phi3 = tf.atan2(abs(E_pol_rotated[1]), abs(E_pol_rotated[0]))
+
+    # Conversion from spherical coordinates to cartesian coordinates:
+    x = r*tf.math.sin(theta)*tf.math.cos(phi)
+    y = r*tf.math.sin(theta)*tf.math.sin(phi)
+    z = r*tf.math.cos(theta)
+
+    # Accounting for the translation of the coordinate system:
+    x2 = x + xo
+    y2 = y + yo
+    z2 = z + zo
+
+    # Accounting for the rotation of the coordinate system:
+    x1 = x2*(tf.math.sin(phi1)*tf.math.sin(phi3) + tf.math.cos(phi1)*tf.math.cos(phi2)*tf.math.cos(phi3)) - y2*(tf.math.cos(phi1)*tf.math.sin(phi3) - tf.math.sin(phi1)*tf.math.cos(phi2)*tf.math.cos(phi3)) - z2*(tf.math.sin(phi2)*tf.math.cos(phi3))
+    y1 = -x2*(tf.math.sin(phi1)*tf.math.cos(phi3) + tf.math.cos(phi1)*tf.math.cos(phi2)*tf.math.sin(phi3)) + y2*(tf.math.cos(phi1)*tf.math.cos(phi3) - tf.math.sin(phi1)*tf.math.cos(phi2)*tf.math.sin(phi3)) + z2*(tf.math.sin(phi2)*tf.math.sin(phi3))
+    z1 = x2*tf.math.cos(phi1)*tf.math.sin(phi2) + y2*tf.math.sin(phi1)*tf.math.sin(phi2) + z2*tf.math.cos(phi2)
+
+    # Conversion from spherical to cartesian (in the primed coordinate system):
+    rp = tf.math.sqrt(x1**2 + y1**2 + z1**2)
+    thetap = tf.atan2(tf.math.sqrt(x1**2 + y1**2), z1)
+    phip = tf.atan2(y1, x1)
+
+    # Far-field E-field (in terms of primed cartesian unit vectors):
+    E_ff = tf.complex(0.0, 1.0)*tf.complex(k*sigma**2*Eo*(1/rp), 0.0)*tf.math.exp(tf.complex(0.0, -1.0*k*rp))*tf.complex(tf.math.exp(-0.5*sigma**2*k**2*tf.math.sin(thetap)*tf.math.sin(thetap)), 0.0)
+    E_ff = E_ff*[xp*tf.complex(tf.math.cos(thetap), 0.0), yp*tf.complex(tf.math.cos(thetap), 0.0), -xp*tf.complex(tf.math.sin(thetap)*tf.math.cos(phip), 0.0) - yp*tf.complex(tf.math.sin(thetap)*tf.math.sin(phip), 0.0)]
+
+    # Converting from primed unit vectors to unprimed unit vectors:
+    Eff = [E_ff[0]*tf.complex(tf.math.sin(phi1)*tf.math.sin(phi3) + tf.math.cos(phi1)*tf.math.cos(phi2)*tf.math.cos(phi3), 0.0) + E_ff[2]*tf.complex(tf.math.cos(phi1)*tf.math.sin(phi2), 0.0),
+           E_ff[0]*tf.complex(tf.math.sin(phi1)*tf.math.cos(phi2)*tf.math.cos(phi3) - tf.math.cos(phi1)*tf.math.sin(phi3), 0.0) + E_ff[2]*tf.complex(tf.math.sin(phi1)*tf.math.sin(phi2), 0.0),
+           E_ff[0]*tf.complex(-1.0*tf.math.sin(phi2)*tf.math.cos(phi3), 0.0) + E_ff[2]*tf.complex(tf.math.cos(phi2), 0.0)]
+    
+    # Convert Eff from a list to a 1x3 vector:
+    Eff = tf.reshape(Eff, [1,3])
+
+    return Eff
 
 # This is a function to test autodiff using Tensorflow.
 def testfunc(x, y, z):

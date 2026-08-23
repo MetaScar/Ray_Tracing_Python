@@ -384,7 +384,3 @@ def Isotropic_Isotropic(surface_normal, no1, no2, p, E_i):
     S_t = tf.norm(S_t)
 
     return p_r, p_t, E_r, E_t, S_r, S_t
-
-
-
-
